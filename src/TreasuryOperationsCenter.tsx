@@ -1,96 +1,61 @@
-import {useMemo,useState} from 'react'
+import {useEffect,useMemo,useState} from 'react'
 import {Activity,ArrowRightLeft,Banknote,CheckCircle2,CircleDollarSign,Landmark,RefreshCw,ShieldCheck,TrendingUp,WalletCards,X} from 'lucide-react'
+import {getApiBase,setApiBase,treasuryApi,type TreasuryDashboard} from './treasuryApi'
 
 type Props={onClose:()=>void;notify:(message:string)=>void}
 type Currency='USD'|'EUR'|'GBP'|'SGD'|'MYR'
-type Settlement={id:string;tenant:string;amount:number;currency:Currency;status:'待处理'|'已完成';time:string}
-type Log={time:string;event:string;detail:string;status:'成功'|'待审批'}
-
 const money=(value:number,currency='USD')=>new Intl.NumberFormat('en-US',{style:'currency',currency,maximumFractionDigits:0}).format(value)
 
 export default function TreasuryOperationsCenter({onClose,notify}:Props){
- const[usdt,setUsdt]=useState(18420000)
- const[fiat,setFiat]=useState(3860000)
- const[sponsorReserve,setSponsorReserve]=useState(1240000)
- const[requiredReserve,setRequiredReserve]=useState(1080000)
- const[autoTopup,setAutoTopup]=useState(true)
- const[minRatio,setMinRatio]=useState(115)
- const[targetRatio,setTargetRatio]=useState(130)
+ const[data,setData]=useState<TreasuryDashboard|null>(null)
+ const[loading,setLoading]=useState(true)
+ const[busy,setBusy]=useState('')
+ const[error,setError]=useState('')
+ const[apiUrl,setUrl]=useState(getApiBase())
  const[fxFrom,setFxFrom]=useState<Currency>('USD')
  const[fxTo,setFxTo]=useState<Currency>('MYR')
  const[fxAmount,setFxAmount]=useState(100000)
- const[settlements,setSettlements]=useState<Settlement[]>([
-  {id:'STL-260719-001',tenant:'NovaPay Asia',amount:228600,currency:'USD',status:'待处理',time:'18:00'},
-  {id:'STL-260719-002',tenant:'Orbit Card Labs',amount:146200,currency:'USD',status:'待处理',time:'18:15'},
-  {id:'STL-260718-014',tenant:'FastLink Platform',amount:618400,currency:'USD',status:'已完成',time:'昨日 23:40'}
- ])
- const[logs,setLogs]=useState<Log[]>([
-  {time:'20:18',event:'流动性监测',detail:'Sponsor Bank Reserve 比率正常',status:'成功'},
-  {time:'19:45',event:'自动补充准备金',detail:'补充 USD 80,000 至 Sponsor Bank',status:'成功'},
-  {time:'18:30',event:'FX Conversion',detail:'USD 150,000 → MYR 661,500',status:'成功'},
-  {time:'17:20',event:'大额资金调拨',detail:'USDT Treasury → Fiat Treasury',status:'待审批'}
- ])
- const pending=useMemo(()=>settlements.filter(x=>x.status==='待处理').reduce((s,x)=>s+x.amount,0),[settlements])
- const ratio=requiredReserve?Math.round(sponsorReserve/requiredReserve*100):0
- const totalLiquidity=fiat+sponsorReserve
- const addLog=(event:string,detail:string,status:Log['status']='成功')=>setLogs(v=>[{time:new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}),event,detail,status},...v].slice(0,8))
- const runTopup=()=>{
-  const target=Math.ceil(requiredReserve*targetRatio/100)
-  const amount=Math.max(0,target-sponsorReserve)
-  if(!amount){notify('Sponsor Bank Reserve 已达到目标比例');return}
-  if(amount>fiat){notify('法币准备金不足，无法完成自动补充');return}
-  setFiat(v=>v-amount);setSponsorReserve(v=>v+amount);addLog('自动补充准备金',`从 Fiat Treasury 调拨 ${money(amount)} 至 Sponsor Bank`);notify('自动补充准备金已执行')
- }
- const runSettlement=()=>{
-  if(!pending){notify('当前没有待处理清算');return}
-  setSettlements(v=>v.map(x=>x.status==='待处理'?{...x,status:'已完成'}:x));setFiat(v=>v-pending);addLog('Daily Settlement',`完成日终清算 ${money(pending)}`);notify('日终清算批次已完成')
- }
- const runFx=()=>{
-  if(fxAmount<=0){notify('请输入有效换汇金额');return}
-  const rates:Record<string,number>={'USD-MYR':4.41,'USD-SGD':1.35,'USD-EUR':.92,'USD-GBP':.78,'MYR-USD':.227,'SGD-USD':.741,'EUR-USD':1.087,'GBP-USD':1.282}
-  const rate=rates[`${fxFrom}-${fxTo}`]??1
-  const result=fxAmount*rate
-  addLog('FX Conversion',`${fxFrom} ${fxAmount.toLocaleString()} → ${fxTo} ${result.toLocaleString(undefined,{maximumFractionDigits:2})}`);notify('模拟换汇订单执行成功')
- }
- return <div className="treasury-overlay">
-  <div className="treasury-window">
-   <header className="treasury-head"><div><span>FASTLINK TREASURY CONTROL PLANE</span><h2>Treasury Operations Center</h2><p>资金运营中心 · 多租户资金池、准备金、流动性、清算与换汇管理</p></div><button onClick={onClose}><X/></button></header>
-   <div className="treasury-body">
-    <section className="toc-metrics">
-     <article><WalletCards/><span>USDT 总持仓</span><strong>{money(usdt)}</strong><small>公司 Treasury 总资产</small></article>
-     <article><Banknote/><span>法币准备金</span><strong>{money(fiat)}</strong><small>可调拨流动资金</small></article>
-     <article><Landmark/><span>Sponsor Bank Reserve</span><strong>{money(sponsorReserve)}</strong><small>最低需求 {money(requiredReserve)}</small></article>
-     <article className={ratio<minRatio?'danger':'healthy'}><ShieldCheck/><span>Liquidity Ratio</span><strong>{ratio}%</strong><small>最低阈值 {minRatio}%</small></article>
-    </section>
-
-    <section className="toc-grid">
-     <article className="toc-panel liquidity-panel"><div className="toc-title"><div><h3>流动性与自动补充准备金</h3><p>持续监测 Sponsor Bank 资金需求，触发自动或人工补充。</p></div><label className="toc-switch"><input type="checkbox" checked={autoTopup} onChange={e=>setAutoTopup(e.target.checked)}/><i/><span>{autoTopup?'自动模式':'人工模式'}</span></label></div>
-      <div className="ratio-ring" style={{'--ratio':`${Math.min(ratio,160)/160*360}deg`} as React.CSSProperties}><div><b>{ratio}%</b><span>当前流动性</span></div></div>
-      <div className="thresholds"><label>最低阈值<input type="number" value={minRatio} onChange={e=>setMinRatio(Number(e.target.value))}/><em>%</em></label><label>补充目标<input type="number" value={targetRatio} onChange={e=>setTargetRatio(Number(e.target.value))}/><em>%</em></label></div>
-      <div className="reserve-track"><div><span>当前 Sponsor Reserve</span><b>{money(sponsorReserve)}</b></div><div><span>结算最低需求</span><b>{money(requiredReserve)}</b></div><div><span>平台可用流动性</span><b>{money(totalLiquidity)}</b></div></div>
-      <button className="toc-primary" onClick={runTopup}><RefreshCw/>立即执行准备金补充</button>
-     </article>
-
-     <article className="toc-panel"><div className="toc-title"><div><h3>FX Conversion</h3><p>模拟 FOMO Pay / 流动性供应商换汇编排。</p></div><ArrowRightLeft/></div>
-      <div className="fx-form"><label>卖出币种<select value={fxFrom} onChange={e=>setFxFrom(e.target.value as Currency)}>{['USD','EUR','GBP','SGD','MYR'].map(x=><option key={x}>{x}</option>)}</select></label><label>买入币种<select value={fxTo} onChange={e=>setFxTo(e.target.value as Currency)}>{['MYR','SGD','USD','EUR','GBP'].map(x=><option key={x}>{x}</option>)}</select></label><label className="fx-amount">换汇金额<input type="number" value={fxAmount} onChange={e=>setFxAmount(Number(e.target.value))}/></label></div>
-      <div className="fx-quote"><span>模拟最优报价</span><strong>1 {fxFrom} ≈ {fxFrom===fxTo?'1.0000':fxFrom==='USD'&&fxTo==='MYR'?'4.4100':'市场报价'} {fxTo}</strong><small>Provider: FOMO Pay Adapter · 报价有效 30 秒</small></div>
-      <button className="toc-primary" onClick={runFx}><ArrowRightLeft/>执行模拟换汇</button>
-     </article>
-    </section>
-
-    <section className="toc-grid lower">
-     <article className="toc-panel"><div className="toc-title"><div><h3>Daily Settlement</h3><p>当日卡消费、ATM、商户支付与合作方净额清算。</p></div><CircleDollarSign/></div>
-      <div className="settlement-summary"><div><span>待清算总额</span><b>{money(pending)}</b></div><div><span>待处理批次</span><b>{settlements.filter(x=>x.status==='待处理').length}</b></div><div><span>预计执行时间</span><b>23:30 UTC+8</b></div></div>
-      <table><thead><tr><th>批次</th><th>主体</th><th>金额</th><th>状态</th></tr></thead><tbody>{settlements.map(x=><tr key={x.id}><td><b>{x.id}</b><small>{x.time}</small></td><td>{x.tenant}</td><td>{money(x.amount,x.currency)}</td><td><span className={`toc-status ${x.status==='已完成'?'done':'pending'}`}>{x.status}</span></td></tr>)}</tbody></table>
-      <button className="toc-primary" disabled={!pending} onClick={runSettlement}><CheckCircle2/>执行日终清算</button>
-     </article>
-     <article className="toc-panel"><div className="toc-title"><div><h3>Treasury Dashboard</h3><p>资金运营事件、调拨和审批审计记录。</p></div><Activity/></div>
-      <div className="toc-logs">{logs.map((x,i)=><div key={`${x.time}-${i}`}><span>{x.time}</span><i className={x.status==='成功'?'ok':'wait'}/><section><b>{x.event}</b><p>{x.detail}</p></section><em>{x.status}</em></div>)}</div>
-     </article>
-    </section>
-
-    <section className="toc-actions"><button onClick={()=>{setUsdt(v=>v+50000);addLog('USDT Treasury','模拟增加 50,000 USDT');notify('已模拟增加 50,000 USDT')}}><TrendingUp/>模拟 USDT 入池</button><button onClick={()=>{setRequiredReserve(v=>v+50000);addLog('Reserve Forecast','预计清算需求增加 50,000 USD');notify('准备金需求预测已更新')}}><Landmark/>模拟准备金需求</button><button onClick={()=>notify('Treasury Dashboard 报表已生成')}><CircleDollarSign/>生成资金日报</button></section>
-   </div>
+ const[targetRatio,setTargetRatio]=useState(130)
+ const load=async()=>{setLoading(true);setError('');try{const result=await treasuryApi.dashboard();setData(result);setTargetRatio(result.liquidity.targetRatio)}catch(e){setError(e instanceof Error?e.message:'无法连接 FastLink API')}finally{setLoading(false)}}
+ useEffect(()=>{void load()},[])
+ const execute=async(name:string,action:()=>Promise<unknown>,message:string)=>{setBusy(name);try{await action();await load();notify(message)}catch(e){const m=e instanceof Error?e.message:'操作失败';setError(m);notify(m)}finally{setBusy('')}}
+ const pending=useMemo(()=>data?.settlements.filter(x=>x.status==='PENDING').reduce((s,x)=>s+x.amount,0)??0,[data])
+ const saveApi=()=>{setApiBase(apiUrl);void load();notify('API 地址已保存，正在重新连接')}
+ const a=data?.accounts??{usdt:0,fiat:0,sponsorReserve:0,requiredReserve:0}
+ const l=data?.liquidity??{ratio:0,minRatio:115,targetRatio:130,autoTopup:true,totalLiquidity:0}
+ return <div className="treasury-overlay"><div className="treasury-window">
+  <header className="treasury-head"><div><span>FASTLINK TREASURY CONTROL PLANE</span><h2>Treasury Operations Center</h2><p>真实 API + Supabase PostgreSQL · 资金、准备金、清算与换汇管理</p></div><button onClick={onClose}><X/></button></header>
+  <div className="treasury-body">
+   <section className="api-connection"><div><i className={error?'offline':'online'}/><b>{error?'Backend Offline':'Backend Connected'}</b><span>{loading?'正在读取数据库…':data?`最后同步 ${new Date(data.generatedAt).toLocaleTimeString('zh-CN')}`:'尚未同步'}</span></div><input value={apiUrl} onChange={e=>setUrl(e.target.value)} aria-label="FastLink API URL"/><button onClick={saveApi}>连接 API</button><button onClick={()=>void load()}><RefreshCw size={15}/>刷新</button></section>
+   {error&&<div className="treasury-error">{error}。请确认 Railway 已部署成功，并在 CORS_ORIGIN 中包含 GitHub Pages 地址。</div>}
+   <section className="toc-metrics">
+    <article><WalletCards/><span>USDT 总持仓</span><strong>{money(a.usdt)}</strong><small>数据库实时余额</small></article>
+    <article><Banknote/><span>法币准备金</span><strong>{money(a.fiat)}</strong><small>可调拨流动资金</small></article>
+    <article><Landmark/><span>Sponsor Bank Reserve</span><strong>{money(a.sponsorReserve)}</strong><small>最低需求 {money(a.requiredReserve)}</small></article>
+    <article className={l.ratio<l.minRatio?'danger':'healthy'}><ShieldCheck/><span>Liquidity Ratio</span><strong>{l.ratio}%</strong><small>最低阈值 {l.minRatio}%</small></article>
+   </section>
+   <section className="toc-grid">
+    <article className="toc-panel liquidity-panel"><div className="toc-title"><div><h3>流动性与自动补充准备金</h3><p>由后端事务锁定账户并写入资金操作日志。</p></div><span className="db-badge">POSTGRESQL</span></div>
+     <div className="ratio-ring" style={{'--ratio':`${Math.min(l.ratio,160)/160*360}deg`} as React.CSSProperties}><div><b>{l.ratio}%</b><span>当前流动性</span></div></div>
+     <div className="thresholds"><label>最低阈值<input type="number" value={l.minRatio} readOnly/><em>%</em></label><label>补充目标<input type="number" value={targetRatio} onChange={e=>setTargetRatio(Number(e.target.value))}/><em>%</em></label></div>
+     <div className="reserve-track"><div><span>当前 Sponsor Reserve</span><b>{money(a.sponsorReserve)}</b></div><div><span>结算最低需求</span><b>{money(a.requiredReserve)}</b></div><div><span>平台可用流动性</span><b>{money(l.totalLiquidity)}</b></div></div>
+     <button className="toc-primary" disabled={!!busy||loading} onClick={()=>void execute('topup',()=>treasuryApi.rebalance(targetRatio),'准备金补充已写入数据库')}><RefreshCw/>{busy==='topup'?'处理中…':'立即执行准备金补充'}</button>
+    </article>
+    <article className="toc-panel"><div className="toc-title"><div><h3>FX Conversion</h3><p>通过后端 Provider Adapter 创建并保存换汇订单。</p></div><ArrowRightLeft/></div>
+     <div className="fx-form"><label>卖出币种<select value={fxFrom} onChange={e=>setFxFrom(e.target.value as Currency)}>{['USD','EUR','GBP','SGD','MYR'].map(x=><option key={x}>{x}</option>)}</select></label><label>买入币种<select value={fxTo} onChange={e=>setFxTo(e.target.value as Currency)}>{['MYR','SGD','USD','EUR','GBP'].map(x=><option key={x}>{x}</option>)}</select></label><label className="fx-amount">换汇金额<input type="number" value={fxAmount} onChange={e=>setFxAmount(Number(e.target.value))}/></label></div>
+     <div className="fx-quote"><span>Sandbox Provider</span><strong>FOMO_PAY_SANDBOX</strong><small>订单会保存到 treasury_fx_orders</small></div>
+     <button className="toc-primary" disabled={!!busy} onClick={()=>void execute('fx',()=>treasuryApi.fx(fxFrom,fxTo,fxAmount),'换汇订单已完成并保存')}><ArrowRightLeft/>{busy==='fx'?'处理中…':'执行换汇'}</button>
+    </article>
+   </section>
+   <section className="toc-grid lower">
+    <article className="toc-panel"><div className="toc-title"><div><h3>Daily Settlement</h3><p>读取并处理 treasury_settlements 待清算批次。</p></div><CircleDollarSign/></div>
+     <div className="settlement-summary"><div><span>待清算总额</span><b>{money(pending)}</b></div><div><span>待处理批次</span><b>{data?.settlements.filter(x=>x.status==='PENDING').length??0}</b></div><div><span>执行模式</span><b>数据库事务</b></div></div>
+     <table><thead><tr><th>批次</th><th>主体</th><th>金额</th><th>状态</th></tr></thead><tbody>{data?.settlements.map(x=><tr key={x.id}><td><b>{x.id}</b><small>{new Date(x.scheduledAt).toLocaleString('zh-CN')}</small></td><td>{x.tenant}</td><td>{money(x.amount,x.currency)}</td><td><span className={`toc-status ${x.status==='COMPLETED'?'done':'pending'}`}>{x.status==='COMPLETED'?'已完成':'待处理'}</span></td></tr>)}</tbody></table>
+     <button className="toc-primary" disabled={!pending||!!busy} onClick={()=>void execute('settle',()=>treasuryApi.settle(),'日终清算已完成并写入数据库')}><CheckCircle2/>{busy==='settle'?'清算中…':'执行日终清算'}</button>
+    </article>
+    <article className="toc-panel"><div className="toc-title"><div><h3>Treasury Dashboard</h3><p>来自 treasury_operation_logs 的真实操作记录。</p></div><Activity/></div><div className="toc-logs">{data?.logs.map(x=><div key={x.id}><span>{new Date(x.time).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}</span><i className={x.status==='SUCCESS'?'ok':'wait'}/><section><b>{x.event}</b><p>{x.detail}</p></section><em>{x.status==='SUCCESS'?'成功':x.status}</em></div>)}</div></article>
+   </section>
+   <section className="toc-actions"><button disabled={!!busy} onClick={()=>void execute('usdt',()=>treasuryApi.simulateUsdt(),'50,000 USDT 已写入 Treasury 数据库')}><TrendingUp/>Sandbox USDT 入池</button><button disabled={!!busy} onClick={()=>void execute('demand',()=>treasuryApi.simulateReserveDemand(),'准备金需求预测已更新')}><Landmark/>增加准备金需求</button><button onClick={()=>window.print()}><CircleDollarSign/>生成资金日报</button></section>
   </div>
- </div>
+ </div></div>
 }
