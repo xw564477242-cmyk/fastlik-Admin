@@ -4,6 +4,7 @@ import Root from './Root'
 import './styles.css'
 import './interactive.css'
 import './subsystem-apps.css'
+import './treasury-operations.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode><Root /></React.StrictMode>,
