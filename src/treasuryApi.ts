@@ -1,6 +1,6 @@
 export type TreasuryDashboard={generatedAt:string;accounts:{usdt:number;fiat:number;sponsorReserve:number;requiredReserve:number};liquidity:{ratio:number;minRatio:number;targetRatio:number;autoTopup:boolean;totalLiquidity:number};settlements:Array<{id:string;tenant:string;amount:number;currency:string;status:string;scheduledAt:string;completedAt:string|null}>;logs:Array<{id:string;time:string;event:string;detail:string;status:string}>}
 
-const DEFAULT_API='https://fastlik-backend-production.up.railway.app/api'
+const DEFAULT_API='https://exquisite-surprise-production-309d.up.railway.app/api'
 export const getApiBase=()=>localStorage.getItem('fastlink_api_base')||DEFAULT_API
 export const setApiBase=(value:string)=>localStorage.setItem('fastlink_api_base',value.replace(/\/$/,''))
 
