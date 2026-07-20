@@ -12,6 +12,7 @@ import './responsive.css'
 import './wallet-business.css'
 import './business-dashboards.css'
 import './wallet-business-fixes.css'
+import './card-processor-acceptance.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode><Root /></React.StrictMode>,
