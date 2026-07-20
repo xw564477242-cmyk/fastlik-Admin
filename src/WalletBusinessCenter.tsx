@@ -1,6 +1,6 @@
 import {useEffect,useMemo,useState} from 'react'
 import {ArrowLeftRight,BookOpenCheck,CheckCircle2,KeyRound,Landmark,LoaderCircle,Play,RefreshCw,WalletCards,X} from 'lucide-react'
-import {getAdminKey,setAdminKey,walletBusinessApi,type Journal,type Tenant,type TreasuryPosition,type TrialBalance,type WalletAccount,type WalletOperation} from './walletBusinessApi'
+import {getAdminKey,setAdminKey,walletBusinessApi,type Journal,type RiskDashboard,type SettlementDashboard,type Tenant,type TreasuryPosition,type TrialBalance,type WalletAccount,type WalletOperation} from './walletBusinessApi'
 
 type Props={onClose:()=>void;onOpenLegacy:()=>void;notify:(message:string)=>void}
 const amount=(value:string|number)=>Number(value).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})
@@ -14,6 +14,8 @@ export default function WalletBusinessCenter({onClose,onOpenLegacy,notify}:Props
  const[operations,setOperations]=useState<WalletOperation[]>([])
  const[journals,setJournals]=useState<Journal[]>([])
  const[trial,setTrial]=useState<TrialBalance[]>([])
+ const[settlement,setSettlement]=useState<SettlementDashboard|null>(null)
+ const[risk,setRisk]=useState<RiskDashboard|null>(null)
  const[busy,setBusy]=useState('')
  const[error,setError]=useState('')
  const[runLog,setRunLog]=useState<string[]>([])
@@ -23,7 +25,7 @@ export default function WalletBusinessCenter({onClose,onOpenLegacy,notify}:Props
  const loadData=async(id=tenantId,apiKey=key)=>{
   if(!id||!apiKey)return
   setBusy('refresh');setError('')
-  try{const[a,p,o,j,t]=await Promise.all([walletBusinessApi.accounts(id,apiKey),walletBusinessApi.treasury(id,apiKey),walletBusinessApi.operations(id,apiKey),walletBusinessApi.journals(id,apiKey),walletBusinessApi.trialBalance(id,apiKey)]);setAccounts(a);setPositions(p);setOperations(o);setJournals(j);setTrial(t)}catch(e){setError(e instanceof Error?e.message:'读取业务数据失败')}finally{setBusy('')}
+  try{const[a,p,o,j,t,s,r]=await Promise.all([walletBusinessApi.accounts(id,apiKey),walletBusinessApi.treasury(id,apiKey),walletBusinessApi.operations(id,apiKey),walletBusinessApi.journals(id,apiKey),walletBusinessApi.trialBalance(id,apiKey),walletBusinessApi.settlementDashboard(id,apiKey),walletBusinessApi.riskDashboard(id,apiKey)]);setAccounts(a);setPositions(p);setOperations(o);setJournals(j);setTrial(t);setSettlement(s);setRisk(r)}catch(e){setError(e instanceof Error?e.message:'读取业务数据失败')}finally{setBusy('')}
  }
  const connect=async()=>{setBusy('connect');setError('');try{setAdminKey(key);const rows=await walletBusinessApi.tenants(key);const sandbox=rows.filter(x=>x.environment==='SANDBOX');setTenants(sandbox);const id=sandbox.some(x=>x.id===tenantId)?tenantId:(sandbox[0]?.id||'');setTenantId(id);sessionStorage.setItem('fastlink_wallet_tenant',id);if(id)await loadData(id,key);notify('Sandbox Admin API 已连接')}catch(e){setError(e instanceof Error?e.message:'连接失败')}finally{setBusy('')}}
  useEffect(()=>{if(key)void connect()},[])
@@ -53,6 +55,7 @@ export default function WalletBusinessCenter({onClose,onOpenLegacy,notify}:Props
    <section className="wbc-run"><div><h3>完整业务流验收</h3><p>自动创建两个钱包并执行 Deposit 1,000 → Transfer 250 → Withdraw 100 → Settlement → Sponsor Reserve。</p></div><button onClick={()=>void runAcceptance()} disabled={!tenantId||busy==='flow'}>{busy==='flow'?<LoaderCircle className="spin"/>:<Play/>}{busy==='flow'?'执行中…':'运行完整资金流'}</button>{runLog.length>0&&<pre>{runLog.join('\n')}</pre>}</section>
    <section className="wbc-grid"><article><h3>Wallet Accounts</h3><table><thead><tr><th>账户</th><th>客户</th><th>余额</th></tr></thead><tbody>{customerAccounts.map(x=><tr key={x.id}><td>{x.name}<small>{x.accountCode}</small></td><td>{x.customerId}</td><td>{amount(x.postedBalance)} {x.assetCode}</td></tr>)}</tbody></table></article><article><h3>Trial Balance</h3><table><thead><tr><th>资产</th><th>Debit</th><th>Credit</th><th>平衡</th></tr></thead><tbody>{trial.map(x=><tr key={x.assetCode}><td>{x.assetCode}</td><td>{amount(x.debit)}</td><td>{amount(x.credit)}</td><td className={x.balanced?'ok':'bad'}>{x.balanced?'BALANCED':'UNBALANCED'}</td></tr>)}</tbody></table></article></section>
    <section className="wbc-grid"><article><h3>Wallet Operations</h3><div className="wbc-list">{operations.slice(0,12).map(x=><div key={x.id}><b>{x.type}</b><span>{amount(x.amount)} {x.assetCode}</span><em className={x.status==='COMPLETED'?'ok':''}>{x.status}</em><small>{x.id}</small></div>)}</div></article><article><h3><BookOpenCheck/> Automatic Journals</h3><div className="wbc-list journals">{journals.slice(0,12).map(x=><div key={x.id}><b>{x.referenceType}</b><span>{x.entries.map(e=>`${e.side} ${amount(e.amount)}`).join(' · ')}</span><em>{x.entries.length} entries</em><small>{x.id}</small></div>)}</div></article></section>
+   <section className="wbc-grid"><article><h3>Settlement Dashboard</h3><div className="wbc-dashboard-stats"><div><span>Pending</span><b>{settlement?.summary.pendingCount??0}</b></div><div><span>Completed</span><b>{settlement?.summary.completedCount??0}</b></div><div><span>Pending USD</span><b>{amount(settlement?.summary.pendingByAsset.USD??0)}</b></div><div><span>Failed</span><b>{settlement?.summary.failedCount??0}</b></div></div><div className="wbc-list">{settlement?.withdrawals.slice(0,8).map(x=><div key={x.id}><b>WITHDRAWAL</b><span>{amount(x.amount)} {x.assetCode}</span><em className={x.status==='COMPLETED'?'ok':''}>{x.status}</em><small>{x.journalIds.length} Journals · {x.id}</small></div>)}</div></article><article><h3>Risk Dashboard</h3><div className="wbc-dashboard-stats"><div><span>Transactions</span><b>{risk?.summary.transactionCount??0}</b></div><div><span>Decline Rate</span><b>{risk?.summary.declineRate??0}%</b></div><div><span>High Value</span><b>{risk?.summary.highValueCount??0}</b></div><div><span>Frozen Cards</span><b>{risk?.summary.frozenCards??0}</b></div></div><div className="wbc-list">{risk?.alerts.slice(0,8).map((x,i)=><div key={`${x.type}-${x.transactionId}-${i}`}><b>{x.type}</b><span>{(Number(x.amountMinor)/100).toFixed(2)} {x.currency}</span><em className={x.severity==='HIGH'?'risk-high':''}>{x.severity}</em><small>{x.transactionId} · {x.cardId}</small></div>)}</div></article></section>
   </main>
  </div></div>
 }
