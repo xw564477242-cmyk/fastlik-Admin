@@ -17,6 +17,7 @@ export default function WalletBusinessCenter({onClose,onOpenLegacy,notify}:Props
  const[settlement,setSettlement]=useState<SettlementDashboard|null>(null)
  const[risk,setRisk]=useState<RiskDashboard|null>(null)
  const[dashboardNotice,setDashboardNotice]=useState('')
+ const[needsSandbox,setNeedsSandbox]=useState(false)
  const[busy,setBusy]=useState('')
  const[error,setError]=useState('')
  const[runLog,setRunLog]=useState<string[]>([])
@@ -36,7 +37,13 @@ export default function WalletBusinessCenter({onClose,onOpenLegacy,notify}:Props
    return true
   }catch(e){setError(e instanceof Error?e.message:'读取业务数据失败');return false}finally{setBusy('')}
  }
- const connect=async()=>{setBusy('connect');setError('');setDashboardNotice('');try{setAdminKey(key);const rows=await walletBusinessApi.tenants(key);const sandbox=rows.filter(x=>x.environment==='SANDBOX');setTenants(sandbox);const id=sandbox.some(x=>x.id===tenantId)?tenantId:(sandbox[0]?.id||'');if(!id)throw new Error('没有找到 Sandbox 租户，请先在 Admin 创建 Sandbox 租户');setTenantId(id);sessionStorage.setItem('fastlink_wallet_tenant',id);const loaded=await loadData(id,key);if(loaded)notify('Sandbox Admin API 已连接')}catch(e){setError(e instanceof Error?e.message:'连接失败')}finally{setBusy('')}}
+ const connect=async()=>{setBusy('connect');setError('');setDashboardNotice('');setNeedsSandbox(false);try{setAdminKey(key);const rows=await walletBusinessApi.tenants(key);const sandbox=rows.filter(x=>x.environment==='SANDBOX');setTenants(sandbox);const id=sandbox.some(x=>x.id===tenantId)?tenantId:(sandbox[0]?.id||'');if(!id){setTenantId('');setNeedsSandbox(true);return}setTenantId(id);sessionStorage.setItem('fastlink_wallet_tenant',id);const loaded=await loadData(id,key);if(loaded)notify('Sandbox Admin API 已连接')}catch(e){setError(e instanceof Error?e.message:'连接失败')}finally{setBusy('')}}
+ const createSandbox=async()=>{
+  if(!key)return
+  setBusy('sandbox');setError('')
+  try{const created=await walletBusinessApi.createSandboxTenant(key,`fastlink-sandbox-${Date.now().toString(36)}`);setTenants([created]);setTenantId(created.id);setNeedsSandbox(false);sessionStorage.setItem('fastlink_wallet_tenant',created.id);const loaded=await loadData(created.id,key);if(loaded)notify('Sandbox 租户已创建并连接')}
+  catch(e){setError(e instanceof Error?e.message:'创建 Sandbox 租户失败')}finally{setBusy('')}
+ }
  useEffect(()=>{if(key)void connect()},[])
  const chooseTenant=(id:string)=>{setTenantId(id);sessionStorage.setItem('fastlink_wallet_tenant',id);void loadData(id,key)}
  const runAcceptance=async()=>{
@@ -60,6 +67,7 @@ export default function WalletBusinessCenter({onClose,onOpenLegacy,notify}:Props
   <main className="wbc-body">
    <section className="wbc-connect"><KeyRound/><input type="password" value={key} onChange={e=>setKey(e.target.value)} placeholder="Railway ADMIN_API_KEY（仅保存于本次浏览器会话）"/><button onClick={()=>void connect()} disabled={!key||!!busy}>{busy==='connect'?'连接中…':'连接'}</button><select value={tenantId} onChange={e=>chooseTenant(e.target.value)}><option value="">选择 Sandbox 租户</option>{tenants.map(t=><option value={t.id} key={t.id}>{t.brandName} · {t.id}</option>)}</select><button onClick={()=>void(tenantId?loadData():connect())} disabled={!key||!!busy}><RefreshCw/>{tenantId?'刷新':'连接并刷新'}</button></section>
    {error&&<div className="wbc-error">{error}</div>}
+   {needsSandbox&&<div className="wbc-sandbox-empty"><div><b>尚未创建 Sandbox 租户</b><span>先创建隔离的测试租户，再执行充值、转账、提现与清算。</span></div><button onClick={()=>void createSandbox()} disabled={!!busy}>{busy==='sandbox'?'创建中…':'一键创建 Sandbox 租户'}</button></div>}
    {dashboardNotice&&<div className="wbc-notice">{dashboardNotice}</div>}
    <section className="wbc-metrics"><article><WalletCards/><span>Available Balance</span><strong>USD {amount(position?.availableBalance||0)}</strong></article><article><Landmark/><span>Sponsor Reserve</span><strong>USD {amount(position?.sponsorReserve||0)}</strong></article><article><ArrowLeftRight/><span>Pending Settlement</span><strong>USD {amount(position?.pendingSettlement||0)}</strong></article><article><CheckCircle2/><span>Liquidity Ratio</span><strong>{position?.liquidityRatio??'—'}{position?.liquidityRatio?'%':''}</strong></article></section>
    <section className="wbc-run"><div><h3>完整业务流验收</h3><p>自动创建两个钱包并执行 Deposit 1,000 → Transfer 250 → Withdraw 100 → Settlement → Sponsor Reserve。</p></div><button onClick={()=>void runAcceptance()} disabled={!tenantId||busy==='flow'}>{busy==='flow'?<LoaderCircle className="spin"/>:<Play/>}{busy==='flow'?'执行中…':'运行完整资金流'}</button>{runLog.length>0&&<pre>{runLog.join('\n')}</pre>}</section>

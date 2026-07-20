@@ -35,6 +35,7 @@ async function adminRequest<T>(path:string,apiKey:string,init?:RequestInit):Prom
 const body=(value:unknown):RequestInit=>({method:'POST',body:JSON.stringify(value)})
 export const walletBusinessApi={
  tenants:(key:string)=>adminRequest<Tenant[]>('/admin/tenants',key),
+ createSandboxTenant:(key:string,slug:string)=>adminRequest<Tenant>('/admin/tenants',key,body({legalName:'FastLink Sandbox',brandName:'FastLink Sandbox',slug,environment:'SANDBOX'})),
  accounts:(tenantId:string,key:string)=>adminRequest<WalletAccount[]>(`/admin/tenants/${tenantId}/ledger/accounts?environment=SANDBOX`,key),
  operations:(tenantId:string,key:string)=>adminRequest<WalletOperation[]>(`/admin/tenants/${tenantId}/wallet/operations?environment=SANDBOX`,key),
  treasury:(tenantId:string,key:string)=>adminRequest<TreasuryPosition[]>(`/admin/tenants/${tenantId}/wallet/treasury?environment=SANDBOX`,key),
