@@ -9,6 +9,7 @@ import './tenant-operations.css'
 import './white-label-delivery.css'
 import './login.css'
 import './responsive.css'
+import './wallet-business.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode><Root /></React.StrictMode>,
