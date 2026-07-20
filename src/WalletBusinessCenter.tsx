@@ -16,6 +16,7 @@ export default function WalletBusinessCenter({onClose,onOpenLegacy,notify}:Props
  const[trial,setTrial]=useState<TrialBalance[]>([])
  const[settlement,setSettlement]=useState<SettlementDashboard|null>(null)
  const[risk,setRisk]=useState<RiskDashboard|null>(null)
+ const[dashboardNotice,setDashboardNotice]=useState('')
  const[busy,setBusy]=useState('')
  const[error,setError]=useState('')
  const[runLog,setRunLog]=useState<string[]>([])
@@ -23,11 +24,19 @@ export default function WalletBusinessCenter({onClose,onOpenLegacy,notify}:Props
  const customerAccounts=useMemo(()=>accounts.filter(x=>x.customerId),[accounts])
 
  const loadData=async(id=tenantId,apiKey=key)=>{
-  if(!id||!apiKey)return
+  if(!id||!apiKey)return false
   setBusy('refresh');setError('')
-  try{const[a,p,o,j,t,s,r]=await Promise.all([walletBusinessApi.accounts(id,apiKey),walletBusinessApi.treasury(id,apiKey),walletBusinessApi.operations(id,apiKey),walletBusinessApi.journals(id,apiKey),walletBusinessApi.trialBalance(id,apiKey),walletBusinessApi.settlementDashboard(id,apiKey),walletBusinessApi.riskDashboard(id,apiKey)]);setAccounts(a);setPositions(p);setOperations(o);setJournals(j);setTrial(t);setSettlement(s);setRisk(r)}catch(e){setError(e instanceof Error?e.message:'读取业务数据失败')}finally{setBusy('')}
+  try{
+   const[a,p,o,j,t]=await Promise.all([walletBusinessApi.accounts(id,apiKey),walletBusinessApi.treasury(id,apiKey),walletBusinessApi.operations(id,apiKey),walletBusinessApi.journals(id,apiKey),walletBusinessApi.trialBalance(id,apiKey)])
+   setAccounts(a);setPositions(p);setOperations(o);setJournals(j);setTrial(t)
+   const[s,r]=await Promise.allSettled([walletBusinessApi.settlementDashboard(id,apiKey),walletBusinessApi.riskDashboard(id,apiKey)])
+   if(s.status==='fulfilled')setSettlement(s.value)
+   if(r.status==='fulfilled')setRisk(r.value)
+   setDashboardNotice(s.status==='rejected'||r.status==='rejected'?'P3 扩展看板尚未部署；P0 钱包资金流仍可正常验收。':'')
+   return true
+  }catch(e){setError(e instanceof Error?e.message:'读取业务数据失败');return false}finally{setBusy('')}
  }
- const connect=async()=>{setBusy('connect');setError('');try{setAdminKey(key);const rows=await walletBusinessApi.tenants(key);const sandbox=rows.filter(x=>x.environment==='SANDBOX');setTenants(sandbox);const id=sandbox.some(x=>x.id===tenantId)?tenantId:(sandbox[0]?.id||'');setTenantId(id);sessionStorage.setItem('fastlink_wallet_tenant',id);if(id)await loadData(id,key);notify('Sandbox Admin API 已连接')}catch(e){setError(e instanceof Error?e.message:'连接失败')}finally{setBusy('')}}
+ const connect=async()=>{setBusy('connect');setError('');setDashboardNotice('');try{setAdminKey(key);const rows=await walletBusinessApi.tenants(key);const sandbox=rows.filter(x=>x.environment==='SANDBOX');setTenants(sandbox);const id=sandbox.some(x=>x.id===tenantId)?tenantId:(sandbox[0]?.id||'');if(!id)throw new Error('没有找到 Sandbox 租户，请先在 Admin 创建 Sandbox 租户');setTenantId(id);sessionStorage.setItem('fastlink_wallet_tenant',id);const loaded=await loadData(id,key);if(loaded)notify('Sandbox Admin API 已连接')}catch(e){setError(e instanceof Error?e.message:'连接失败')}finally{setBusy('')}}
  useEffect(()=>{if(key)void connect()},[])
  const chooseTenant=(id:string)=>{setTenantId(id);sessionStorage.setItem('fastlink_wallet_tenant',id);void loadData(id,key)}
  const runAcceptance=async()=>{
@@ -51,6 +60,7 @@ export default function WalletBusinessCenter({onClose,onOpenLegacy,notify}:Props
   <main className="wbc-body">
    <section className="wbc-connect"><KeyRound/><input type="password" value={key} onChange={e=>setKey(e.target.value)} placeholder="Railway ADMIN_API_KEY（仅保存于本次浏览器会话）"/><button onClick={()=>void connect()} disabled={!key||!!busy}>{busy==='connect'?'连接中…':'连接'}</button><select value={tenantId} onChange={e=>chooseTenant(e.target.value)}><option value="">选择 Sandbox 租户</option>{tenants.map(t=><option value={t.id} key={t.id}>{t.brandName} · {t.id}</option>)}</select><button onClick={()=>void loadData()} disabled={!tenantId||!!busy}><RefreshCw/>刷新</button></section>
    {error&&<div className="wbc-error">{error}</div>}
+   {dashboardNotice&&<div className="wbc-notice">{dashboardNotice}</div>}
    <section className="wbc-metrics"><article><WalletCards/><span>Available Balance</span><strong>USD {amount(position?.availableBalance||0)}</strong></article><article><Landmark/><span>Sponsor Reserve</span><strong>USD {amount(position?.sponsorReserve||0)}</strong></article><article><ArrowLeftRight/><span>Pending Settlement</span><strong>USD {amount(position?.pendingSettlement||0)}</strong></article><article><CheckCircle2/><span>Liquidity Ratio</span><strong>{position?.liquidityRatio??'—'}{position?.liquidityRatio?'%':''}</strong></article></section>
    <section className="wbc-run"><div><h3>完整业务流验收</h3><p>自动创建两个钱包并执行 Deposit 1,000 → Transfer 250 → Withdraw 100 → Settlement → Sponsor Reserve。</p></div><button onClick={()=>void runAcceptance()} disabled={!tenantId||busy==='flow'}>{busy==='flow'?<LoaderCircle className="spin"/>:<Play/>}{busy==='flow'?'执行中…':'运行完整资金流'}</button>{runLog.length>0&&<pre>{runLog.join('\n')}</pre>}</section>
    <section className="wbc-grid"><article><h3>Wallet Accounts</h3><table><thead><tr><th>账户</th><th>客户</th><th>余额</th></tr></thead><tbody>{customerAccounts.map(x=><tr key={x.id}><td>{x.name}<small>{x.accountCode}</small></td><td>{x.customerId}</td><td>{amount(x.postedBalance)} {x.assetCode}</td></tr>)}</tbody></table></article><article><h3>Trial Balance</h3><table><thead><tr><th>资产</th><th>Debit</th><th>Credit</th><th>平衡</th></tr></thead><tbody>{trial.map(x=><tr key={x.assetCode}><td>{x.assetCode}</td><td>{amount(x.debit)}</td><td>{amount(x.credit)}</td><td className={x.balanced?'ok':'bad'}>{x.balanced?'BALANCED':'UNBALANCED'}</td></tr>)}</tbody></table></article></section>
