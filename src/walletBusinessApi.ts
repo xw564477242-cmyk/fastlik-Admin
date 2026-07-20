@@ -8,6 +8,9 @@ export type Journal={id:string;referenceType:string;referenceId?:string;descript
 export type TrialBalance={assetCode:string;debit:string;credit:string;balanced:boolean}
 export type SettlementDashboard={generatedAt:string;summary:{pendingCount:number;completedCount:number;failedCount:number;pendingByAsset:Record<string,string>;oldestPendingAt:string|null};positions:Array<{assetCode:string;availableBalance:string;pendingSettlement:string}>;withdrawals:Array<{id:string;status:string;amount:string;assetCode:string;journalIds:string[];createdAt:string;completedAt:string|null}>;journals:Journal[]}
 export type RiskDashboard={generatedAt:string;summary:{transactionCount:number;declinedCount:number;declineRate:number;highValueCount:number;highValueThresholdMinor:string;frozenCards:number;openAlerts:number};alerts:Array<{type:string;severity:string;transactionId:string;cardId:string;amountMinor:string;currency:string;occurredAt:string}>}
+export type SandboxCustomer={id:string;externalUserId:string;providerCustomerRef:string}
+export type ProcessorCard={id:string;customerId:string;environment:string;provider:string;providerPublicToken:string;type:string;status:string;maskedPan?:string;last4?:string;expiryMonth?:number;expiryYear?:number;currency:string;alias?:string;balance?:ProcessorCardBalance|null}
+export type ProcessorCardBalance={availableBalanceMinor:string;currentBalanceMinor:string;pendingAmountMinor:string;currency:string;updatedAt?:string}
 
 const keyName='fastlink_admin_api_key'
 export const getAdminKey=()=>sessionStorage.getItem(keyName)||''
@@ -35,6 +38,12 @@ export const walletBusinessApi={
  trialBalance:(tenantId:string,key:string)=>adminRequest<TrialBalance[]>(`/admin/tenants/${tenantId}/ledger/trial-balance?environment=SANDBOX`,key),
  settlementDashboard:(tenantId:string,key:string)=>adminRequest<SettlementDashboard>(`/admin/tenants/${tenantId}/dashboards/settlement?environment=SANDBOX`,key),
  riskDashboard:(tenantId:string,key:string)=>adminRequest<RiskDashboard>(`/admin/tenants/${tenantId}/dashboards/risk?environment=SANDBOX`,key),
+ createCardCustomer:(tenantId:string,key:string,externalUserId:string)=>adminRequest<SandboxCustomer>(`/admin/tenants/${tenantId}/card-sandbox/customers`,key,body({externalUserId})),
+ createProcessorCard:(tenantId:string,key:string,customerId:string,idempotencyKey:string)=>adminRequest<ProcessorCard>(`/admin/tenants/${tenantId}/cards/virtual`,key,body({customerId,cardProduct:100,cardHolder:{firstName:'FastLink',lastName:'Sandbox'},currency:'USD',alias:'Sprint-02 Acceptance',idempotencyKey})),
+ retrieveProcessorCard:(tenantId:string,key:string,cardId:string)=>adminRequest<ProcessorCard>(`/admin/tenants/${tenantId}/cards/${cardId}`,key),
+ freezeProcessorCard:(tenantId:string,key:string,cardId:string,idempotencyKey:string)=>adminRequest<ProcessorCard>(`/admin/tenants/${tenantId}/cards/${cardId}/freeze`,key,body({idempotencyKey})),
+ unfreezeProcessorCard:(tenantId:string,key:string,cardId:string,idempotencyKey:string)=>adminRequest<ProcessorCard>(`/admin/tenants/${tenantId}/cards/${cardId}/unfreeze`,key,body({idempotencyKey})),
+ processorCardBalance:(tenantId:string,key:string,cardId:string)=>adminRequest<ProcessorCardBalance>(`/admin/tenants/${tenantId}/cards/${cardId}/balance`,key),
  createWallet:(tenantId:string,key:string,customerId:string,name:string)=>adminRequest<WalletAccount>(`/admin/tenants/${tenantId}/wallet/accounts`,key,body({environment:'SANDBOX',customerId,assetCode:'USD',name})),
  deposit:(tenantId:string,key:string,walletAccountId:string,amount:string,idempotencyKey:string)=>adminRequest<any>(`/admin/tenants/${tenantId}/wallet/deposits`,key,body({environment:'SANDBOX',idempotencyKey,assetCode:'USD',amount,walletAccountId,externalReference:'ADMIN_ACCEPTANCE_FLOW'})),
  transfer:(tenantId:string,key:string,sourceAccountId:string,destinationAccountId:string,amount:string,idempotencyKey:string)=>adminRequest<any>(`/admin/tenants/${tenantId}/wallet/transfers`,key,body({environment:'SANDBOX',idempotencyKey,assetCode:'USD',amount,sourceAccountId,destinationAccountId,externalReference:'ADMIN_ACCEPTANCE_FLOW'})),
