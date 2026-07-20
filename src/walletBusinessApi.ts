@@ -17,14 +17,18 @@ export const getAdminKey=()=>sessionStorage.getItem(keyName)||''
 export const setAdminKey=(value:string)=>value?sessionStorage.setItem(keyName,value):sessionStorage.removeItem(keyName)
 
 async function adminRequest<T>(path:string,apiKey:string,init?:RequestInit):Promise<T>{
- try{
-  const response=await fetch(`${DEFAULT_API}${path}`,{...init,headers:{'Content-Type':'application/json','x-admin-api-key':apiKey,...(init?.headers||{})}})
-  if(!response.ok){let message=`API ${response.status}`;try{const payload=await response.json();message=Array.isArray(payload.message)?payload.message.join(', '):(payload.message||message)}catch{}const requestId=response.headers.get('x-request-id');throw new Error(`${message} · ${response.status} ${path}${requestId?` · ${requestId}`:''}`)}
-  return response.json() as Promise<T>
- }catch(error){
-  if(error instanceof TypeError)throw new Error(`无法连接 FastLink API（${DEFAULT_API}）：${error.message}`)
-  throw error
+ for(let attempt=1;attempt<=3;attempt+=1){
+  try{
+   const response=await fetch(`${DEFAULT_API}${path}`,{...init,mode:'cors',credentials:'omit',cache:'no-store',headers:{'Content-Type':'application/json','x-admin-api-key':apiKey,...(init?.headers||{})}})
+   if(!response.ok){let message=`API ${response.status}`;try{const payload=await response.json();message=Array.isArray(payload.message)?payload.message.join(', '):(payload.message||message)}catch{}const requestId=response.headers.get('x-request-id');throw new Error(`${message} · ${response.status} ${path}${requestId?` · ${requestId}`:''}`)}
+   return response.json() as Promise<T>
+  }catch(error){
+   if(!(error instanceof TypeError))throw error
+   if(attempt===3)throw new Error(`无法连接 FastLink API · ${path} · 已重试 3 次：${error.message}`)
+   await new Promise(resolve=>setTimeout(resolve,attempt*500))
+  }
  }
+ throw new Error(`无法连接 FastLink API · ${path}`)
 }
 
 const body=(value:unknown):RequestInit=>({method:'POST',body:JSON.stringify(value)})
