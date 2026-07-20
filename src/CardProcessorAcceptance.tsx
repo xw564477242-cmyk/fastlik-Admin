@@ -17,13 +17,19 @@ export default function CardProcessorAcceptance({tenantId,apiKey,notify}:Props){
   const log=(value:string)=>setLogs(rows=>[...rows,value])
   setBusy(true);setError('');setLogs([]);setCard(null);setBalance(null)
   try{
+   log('→ Customer Mapping')
    const customer=await walletBusinessApi.createCardCustomer(tenantId,apiKey,`sprint03-${stamp}`);log(`✓ Customer Mapping · ${customer.id}`)
+   log('→ POST /cards/create')
    const created=await walletBusinessApi.createProcessorCard(tenantId,apiKey,customer.id,`sprint03:${stamp}:create`);setCard(created);log(`✓ CardService → CardProcessor → ${created.provider} · ${created.id}`)
+   log(`→ GET /cards/${created.id}`)
    const retrieved=await walletBusinessApi.retrieveProcessorCard(tenantId,apiKey,created.id);log(`✓ Retrieve Card · ${retrieved.status} · ${retrieved.maskedPan||retrieved.providerPublicToken}`)
+   log('→ POST /cards/freeze')
    const frozen=await walletBusinessApi.freezeProcessorCard(tenantId,apiKey,created.id,`sprint03:${stamp}:freeze`);setCard(frozen);log(`✓ Freeze · ${frozen.status}`)
+   log('→ POST /cards/unfreeze')
    const active=await walletBusinessApi.unfreezeProcessorCard(tenantId,apiKey,created.id,`sprint03:${stamp}:unfreeze`);setCard(active);log(`✓ Unfreeze · ${active.status}`)
+   log('→ GET /cards/balance')
    const current=await walletBusinessApi.processorCardBalance(tenantId,apiKey,created.id);setBalance(current);log(`✓ Card Balance · ${current.availableBalanceMinor} minor ${current.currency}`)
-   notify('Sprint-02 CardProcessor Mock 验收成功')
+   notify('Sprint-03 CardProcessor Mock 验收成功')
   }catch(e){const message=e instanceof Error?e.message:'CardProcessor 验收失败';setError(message);log(`✗ ${message}`)}finally{setBusy(false)}
  }
 
