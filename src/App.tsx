@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import { Activity, AlertTriangle, Bell, Boxes, Building2, CheckCircle2, ChevronDown, CircleDollarSign, Code2, CreditCard, Database, FileCog, Globe2, KeyRound, Landmark, LayoutDashboard, LockKeyhole, Menu, Network, Palette, Plus, RefreshCw, Search, Settings, ShieldCheck, Users, WalletCards, Webhook, X, LogOut } from 'lucide-react'
+import {AdminRole} from './LoginScreen'
 
 type NavId='overview'|'tenants'|'whitelabel'|'programs'|'subsystems'|'funds'|'revenue'|'sandbox'|'api'|'operations'|'risk'|'permissions'|'system'
 type Toast={text:string;type:'ok'|'warn'}|null
 type Tenant={id:string;name:string;country:string;model:'White Label'|'OEM'|'ODM';status:'运行中'|'审核中'|'暂停';users:number;cards:number;volume:number;kyb:string;brand:string}
 type Program={id:string;tenant:string;name:string;scheme:string;type:string;status:string;issued:number;bin:string}
 type Role={name:string;scope:string;members:number;modules:string[];status:'启用'|'停用'}
-type AppProps={onOpenTenant:(id:string)=>void;onOpenWhiteLabel:(id:string)=>void;onOpenSubsystem:()=>void;onOpenTreasury:()=>void}
+type AppProps={role:AdminRole;onLogout:()=>void;onOpenTenant:(id:string)=>void;onOpenWhiteLabel:(id:string)=>void;onOpenSubsystem:()=>void;onOpenTreasury:()=>void}
 
 const nav=[
 {id:'overview' as NavId,label:'平台总览',icon:LayoutDashboard},
@@ -22,6 +23,15 @@ const nav=[
 {id:'risk' as NavId,label:'风控与合规',icon:ShieldCheck,badge:6},
 {id:'permissions' as NavId,label:'管理权限中心',icon:LockKeyhole},
 {id:'system' as NavId,label:'系统设置与审计',icon:Settings}]
+
+const roleAccess:Record<AdminRole,NavId[]>={
+ 'Platform Super Admin':nav.map(x=>x.id),
+ 'Tenant Administrator':['overview','tenants','whitelabel','programs','subsystems','operations','risk'],
+ 'Treasury Operator':['overview','funds','revenue','system'],
+ 'Compliance Officer':['overview','tenants','operations','risk','system'],
+ 'Developer':['overview','subsystems','sandbox','api','system'],
+ 'Read Only Auditor':['overview','tenants','funds','revenue','risk','permissions','system']
+}
 
 const seedTenants:Tenant[]=[
 {id:'TEN-1001',name:'NovaPay Asia',country:'新加坡',model:'White Label',status:'运行中',users:12840,cards:7310,volume:4286000,kyb:'已通过',brand:'NovaPay'},
@@ -56,17 +66,17 @@ function Tag({v}:{v:string}){return <span className={`status tag-${v.replaceAll(
 function Header({title,desc,label,action}:{title:string;desc:string;label?:string;action?:()=>void}){return <div className="page-head"><div><h2>{title}</h2><p>{desc}</p></div>{action&&<button className="primary-btn" onClick={action}><Plus size={16}/>{label}</button>}</div>}
 function Stat({label,value,sub}:{label:string;value:string;sub:string}){return <article className="metric-card"><span>{label}</span><strong>{value}</strong><small>{sub}</small></article>}
 
-export default function App({onOpenTenant,onOpenWhiteLabel,onOpenSubsystem,onOpenTreasury}:AppProps){
+export default function App({role,onLogout,onOpenTenant,onOpenWhiteLabel,onOpenSubsystem,onOpenTreasury}:AppProps){
  const[active,setActive]=useState<NavId>('overview');const[mobile,setMobile]=useState(false);const[query,setQuery]=useState('');const[toast,setToast]=useState<Toast>(null)
  const[tenantView,setTenantView]=useState('FastLink Platform');const[tenants,setTenants]=useState(seedTenants);const[programs,setPrograms]=useState(seedPrograms);const[roles,setRoles]=useState(initialRoles)
  const[reserve,setReserve]=useState({usdt:18420000,fiat:3860000,settlement:428600,merchant:214000});const[sandboxRuns,setSandboxRuns]=useState(1284)
  const notify=(text:string,type:'ok'|'warn'='ok')=>{setToast({text,type});setTimeout(()=>setToast(null),2200)}
- const current=nav.find(x=>x.id===active)!;const filteredTenants=useMemo(()=>tenants.filter(t=>`${t.id} ${t.name} ${t.country} ${t.model} ${t.status}`.toLowerCase().includes(query.toLowerCase())),[tenants,query])
+ const visibleNav=useMemo(()=>nav.filter(x=>roleAccess[role].includes(x.id)),[role]);const current=nav.find(x=>x.id===active)!;const filteredTenants=useMemo(()=>tenants.filter(t=>`${t.id} ${t.name} ${t.country} ${t.model} ${t.status}`.toLowerCase().includes(query.toLowerCase())),[tenants,query])
  const switchPage=(id:NavId)=>{setActive(id);setMobile(false)}
  const addTenant=()=>{const n=tenants.length+1;setTenants(v=>[...v,{id:`TEN-10${n}`,name:`New Partner ${n}`,country:'待设置',model:'White Label',status:'审核中',users:0,cards:0,volume:0,kyb:'待提交',brand:`Partner ${n}`}]);notify('已创建新的测试租户')}
  const toggleTenant=(id:string)=>{setTenants(v=>v.map(t=>t.id===id?{...t,status:t.status==='暂停'?'运行中':'暂停'}:t));notify('租户状态已更新')}
  const settle=()=>{setReserve(v=>({...v,fiat:v.fiat-v.settlement,settlement:0}));notify('测试清算批次已完成')}
- return <div className="app-shell"><aside className={`sidebar ${mobile?'open':''}`}><div className="brand"><div className="brand-mark">F</div><div><b>FastLink</b><span>FINANCIAL SAAS CONTROL</span></div><button className="mobile-close" onClick={()=>setMobile(false)}><X/></button></div><div className="sandbox-badge"><i/>SaaS Sandbox · 多租户模拟数据</div><nav>{nav.map(({id,label,icon:Icon,badge})=><button key={id} className={active===id?'active':''} onClick={()=>switchPage(id)}><Icon size={18}/><span>{label}</span>{badge&&<em>{badge}</em>}</button>)}</nav><div className="sidebar-foot"><div className="system-dot"><i/>所有测试服务正常</div><button><LogOut size={17}/>退出登录</button></div></aside>{mobile&&<div className="scrim" onClick={()=>setMobile(false)}/>}<main><header className="topbar"><div className="title-wrap"><button className="menu-btn" onClick={()=>setMobile(true)}><Menu/></button><div><h1>{current.label}</h1><p>FastLink Financial SaaS Platform · Sandbox V1</p></div></div><div className="top-actions"><select className="tenant-select" value={tenantView} onChange={e=>setTenantView(e.target.value)}><option>FastLink Platform</option>{tenants.map(t=><option key={t.id}>{t.name}</option>)}</select><label className="search-box"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索租户、卡项目、用户..."/></label><button className="icon-btn"><Bell size={18}/><i/></button></div></header><div className="page-content">
+ return <div className="app-shell"><aside className={`sidebar ${mobile?'open':''}`}><div className="brand"><div className="brand-mark">F</div><div><b>FastLink</b><span>FINANCIAL SAAS CONTROL</span></div><button className="mobile-close" onClick={()=>setMobile(false)}><X/></button></div><div className="sandbox-badge"><i/>SaaS Sandbox · 多租户模拟数据</div><nav>{visibleNav.map(({id,label,icon:Icon,badge})=><button key={id} className={active===id?'active':''} onClick={()=>switchPage(id)}><Icon size={18}/><span>{label}</span>{badge&&<em>{badge}</em>}</button>)}</nav><div className="sidebar-foot"><div className="system-dot"><i/>所有测试服务正常</div><button onClick={onLogout}><LogOut size={17}/>退出登录</button></div></aside>{mobile&&<div className="scrim" onClick={()=>setMobile(false)}/>}<main><header className="topbar"><div className="title-wrap"><button className="menu-btn" onClick={()=>setMobile(true)}><Menu/></button><div><h1>{current.label}</h1><p>FastLink Financial SaaS Platform · Sandbox V1</p></div></div><div className="top-actions"><span className="role-badge">{role}</span><select className="tenant-select" value={tenantView} onChange={e=>setTenantView(e.target.value)}><option>FastLink Platform</option>{tenants.map(t=><option key={t.id}>{t.name}</option>)}</select><label className="search-box"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索租户、卡项目、用户..."/></label><button className="icon-btn"><Bell size={18}/><i/></button></div></header><div className="page-content">
  {active==='overview'&&<Overview tenants={tenants} reserve={reserve} setActive={switchPage}/>} {active==='tenants'&&<Tenants rows={filteredTenants} add={addTenant} toggle={toggleTenant} notify={notify} open={onOpenTenant}/>} {active==='whitelabel'&&<WhiteLabel notify={notify} open={onOpenWhiteLabel}/>} {active==='programs'&&<Programs rows={programs} setRows={setPrograms} notify={notify}/>} {active==='subsystems'&&<Subsystems open={onOpenSubsystem}/>} {active==='funds'&&<Funds reserve={reserve} setReserve={setReserve} settle={settle} notify={notify} open={onOpenTreasury}/>} {active==='revenue'&&<Revenue notify={notify}/>} {active==='sandbox'&&<Sandbox runs={sandboxRuns} setRuns={setSandboxRuns} notify={notify}/>} {active==='api'&&<ApiCenter notify={notify}/>} {active==='operations'&&<Operations notify={notify}/>} {active==='risk'&&<Risk notify={notify}/>} {active==='permissions'&&<Permissions roles={roles} setRoles={setRoles} notify={notify}/>} {active==='system'&&<System notify={notify}/>} </div></main>{toast&&<div className={`toast ${toast.type}`}>{toast.type==='ok'?<CheckCircle2/>:<AlertTriangle/>}{toast.text}</div>}</div>
 }
 
