@@ -1,4 +1,4 @@
-import {DEFAULT_API,getApiBase,setApiBase} from './treasuryApi'
+import {DEFAULT_API} from './treasuryApi'
 
 export type Tenant={id:string;brandName:string;legalName:string;environment:'SANDBOX'|'PRODUCTION'}
 export type WalletAccount={id:string;accountCode:string;name:string;customerId?:string;assetCode:string;postedBalance:string;pendingBalance:string}
@@ -14,22 +14,14 @@ export const getAdminKey=()=>sessionStorage.getItem(keyName)||''
 export const setAdminKey=(value:string)=>value?sessionStorage.setItem(keyName,value):sessionStorage.removeItem(keyName)
 
 async function adminRequest<T>(path:string,apiKey:string,init?:RequestInit):Promise<T>{
- const configuredBase=getApiBase()
- const bases=[...new Set([configuredBase,DEFAULT_API])]
- let networkError:unknown
- for(const base of bases){
-  try{
-   const response=await fetch(`${base}${path}`,{...init,headers:{'Content-Type':'application/json','x-admin-api-key':apiKey,...(init?.headers||{})}})
-   if(!response.ok){let message=`API ${response.status}`;try{const payload=await response.json();message=Array.isArray(payload.message)?payload.message.join(', '):(payload.message||message)}catch{}throw new Error(message)}
-   if(base!==configuredBase)setApiBase(base)
-   return response.json() as Promise<T>
-  }catch(error){
-   if(error instanceof TypeError){networkError=error;continue}
-   throw error
-  }
+ try{
+  const response=await fetch(`${DEFAULT_API}${path}`,{...init,headers:{'Content-Type':'application/json','x-admin-api-key':apiKey,...(init?.headers||{})}})
+  if(!response.ok){let message=`API ${response.status}`;try{const payload=await response.json();message=Array.isArray(payload.message)?payload.message.join(', '):(payload.message||message)}catch{}const requestId=response.headers.get('x-request-id');throw new Error(`${message} · ${response.status} ${path}${requestId?` · ${requestId}`:''}`)}
+  return response.json() as Promise<T>
+ }catch(error){
+  if(error instanceof TypeError)throw new Error(`无法连接 FastLink API（${DEFAULT_API}）：${error.message}`)
+  throw error
  }
- const detail=networkError instanceof Error?networkError.message:'network error'
- throw new Error(`无法连接 FastLink API（${DEFAULT_API}）：${detail}`)
 }
 
 const body=(value:unknown):RequestInit=>({method:'POST',body:JSON.stringify(value)})
