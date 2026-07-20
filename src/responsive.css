@@ -1,0 +1,39 @@
+@media (max-width: 1180px) {
+  .topbar {
+    padding: 0 18px;
+  }
+
+  .title-wrap {
+    flex: 0 0 auto;
+  }
+
+  .title-wrap > div {
+    min-width: max-content;
+  }
+
+  .title-wrap p {
+    white-space: nowrap;
+  }
+
+  .top-actions {
+    min-width: 0;
+  }
+
+  .search-box {
+    display: none;
+  }
+
+  .tenant-select {
+    max-width: 170px;
+  }
+}
+
+@media (max-width: 760px) {
+  .title-wrap > div {
+    min-width: 0;
+  }
+
+  .title-wrap p {
+    display: none;
+  }
+}
