@@ -15,6 +15,7 @@ import './wallet-business-fixes.css'
 import './card-processor-acceptance.css'
 import './sprint06-business.css'
 import './sprint07-business.css'
+import './sprint09-business.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode><Root /></React.StrictMode>,
