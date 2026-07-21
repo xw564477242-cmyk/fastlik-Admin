@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node scripts/verify-sprint06-demo.mjs && node scripts/verify-sprint07-demo.mjs && node scripts/verify-sprint11-merchant.mjs"
+    "test": "node scripts/verify-sprint12-production.mjs"
   },
   "dependencies": {
     "lucide-react": "0.468.0",
