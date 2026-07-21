@@ -33,6 +33,11 @@ const nav=[
 {id:'permissions' as NavId,label:'Role Management',icon:LockKeyhole},
 {id:'system' as NavId,label:'系统设置与审计',icon:Settings}]
 
+const requestedView=():NavId=>{
+ const value=new URLSearchParams(window.location.search).get('view') as NavId|null
+ return value&&nav.some(item=>item.id===value)?value:'overview'
+}
+
 const roleAccess:Record<AdminRole,NavId[]>={
  'Platform Super Admin':nav.map(x=>x.id),
  'Tenant Administrator':['overview','tenants','whitelabel','programs','cardcenter','cardhistory','subsystems','dashboards','merchanttesting','operations','risk'],
@@ -76,12 +81,12 @@ function Header({title,desc,label,action}:{title:string;desc:string;label?:strin
 function Stat({label,value,sub}:{label:string;value:string;sub:string}){return <article className="metric-card"><span>{label}</span><strong>{value}</strong><small>{sub}</small></article>}
 
 export default function App({role,onLogout,onOpenTenant,onOpenWhiteLabel,onOpenSubsystem,onOpenTreasury}:AppProps){
- const[active,setActive]=useState<NavId>('overview');const[mobile,setMobile]=useState(false);const[query,setQuery]=useState('');const[toast,setToast]=useState<Toast>(null)
+ const[active,setActive]=useState<NavId>(()=>{const view=requestedView();return roleAccess[role].includes(view)?view:'overview'});const[mobile,setMobile]=useState(false);const[query,setQuery]=useState('');const[toast,setToast]=useState<Toast>(null)
  const[tenantView,setTenantView]=useState('FastLink Platform');const[tenants,setTenants]=useState(seedTenants);const[programs,setPrograms]=useState(seedPrograms);const[roles,setRoles]=useState(initialRoles)
  const[reserve,setReserve]=useState({usdt:18420000,fiat:3860000,settlement:428600,merchant:214000});const[sandboxRuns,setSandboxRuns]=useState(1284)
  const notify=(text:string,type:'ok'|'warn'='ok')=>{setToast({text,type});setTimeout(()=>setToast(null),2200)}
  const visibleNav=useMemo(()=>nav.filter(x=>roleAccess[role].includes(x.id)),[role]);const current=nav.find(x=>x.id===active)!;const filteredTenants=useMemo(()=>tenants.filter(t=>`${t.id} ${t.name} ${t.country} ${t.model} ${t.status}`.toLowerCase().includes(query.toLowerCase())),[tenants,query])
- const switchPage=(id:NavId)=>{setActive(id);setMobile(false)}
+ const switchPage=(id:NavId)=>{setActive(id);setMobile(false);const url=new URL(window.location.href);url.searchParams.set('view',id);window.history.replaceState({},'',url)}
  const addTenant=()=>{const n=tenants.length+1;setTenants(v=>[...v,{id:`TEN-10${n}`,name:`New Partner ${n}`,country:'待设置',model:'White Label',status:'审核中',users:0,cards:0,volume:0,kyb:'待提交',brand:`Partner ${n}`}]);notify('已创建新的测试租户')}
  const toggleTenant=(id:string)=>{setTenants(v=>v.map(t=>t.id===id?{...t,status:t.status==='暂停'?'运行中':'暂停'}:t));notify('租户状态已更新')}
  const settle=()=>{setReserve(v=>({...v,fiat:v.fiat-v.settlement,settlement:0}));notify('测试清算批次已完成')}
