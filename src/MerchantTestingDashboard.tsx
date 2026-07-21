@@ -2,6 +2,7 @@ import {useMemo,useState} from 'react'
 import {Activity,Building2,CheckCircle2,CreditCard,Download,Search,WalletCards} from 'lucide-react'
 import {downloadCsv} from './sprint06DemoData'
 import {createSprint07DemoData} from './sprint07DemoData'
+import MerchantLivePanel from './MerchantLivePanel'
 
 type Tab='merchants'|'cards'|'wallets'|'transactions'
 type Props={notify:(message:string)=>void}
@@ -21,7 +22,8 @@ export default function MerchantTestingDashboard({notify}:Props){
  const approved=data.transactions.filter(row=>row.status==='APPROVED').length
 
  return <div className="s07-page">
-  <header className="s07-head merchant"><div><span>SPRINT‑07 · MERCHANT / TESTING DASHBOARD</span><h2>商户与大规模 Mock 验收中心</h2><p>100 商户、500 卡片、1,000 钱包、10,000 交易；支持搜索、筛选、CSV 与演示验证。</p></div><div className="s07-adapter mock"><i/>DETERMINISTIC MOCK</div></header>
+  <header className="s07-head merchant"><div><span>SPRINT‑11 · MERCHANT / TESTING DASHBOARD</span><h2>商户业务闭环与大规模 Mock 验收中心</h2><p>真实 Sandbox API 与 100 商户、500 卡片、1,000 钱包、10,000 交易 Mock 共存。</p></div><div className="s07-adapter mock"><i/>REAL API + MOCK</div></header>
+  <MerchantLivePanel notify={notify}/>
   <section className="s07-acceptance-strip"><div><CheckCircle2/><strong>100</strong><span>Merchants</span></div><div><CheckCircle2/><strong>500</strong><span>Cards</span></div><div><CheckCircle2/><strong>1,000</strong><span>Wallets</span></div><div><CheckCircle2/><strong>10,000</strong><span>Transactions</span></div><p>验收数据已就绪 · {regionCount} 个区域 · 6 种币种</p></section>
   <section className="s07-metrics"><article><Building2/><span>活跃商户</span><strong>{data.merchants.filter(row=>row.status==='ACTIVE').length}</strong><small>共 100 个 Sandbox 商户</small></article><article><Activity/><span>交易规模</span><strong>{money(volume)}</strong><small>Mock 业务总额</small></article><article><CheckCircle2/><span>授权成功率</span><strong>{(approved/data.transactions.length*100).toFixed(2)}%</strong><small>{approved.toLocaleString()} 笔 APPROVED</small></article><article><WalletCards/><span>钱包资产</span><strong>{money(data.wallets.reduce((sum,row)=>sum+row.balance,0))}</strong><small>多币种折算演示值</small></article></section>
   <nav className="s07-tabs">{([{id:'merchants',label:'Merchants',icon:Building2},{id:'cards',label:'Cards',icon:CreditCard},{id:'wallets',label:'Wallets',icon:WalletCards},{id:'transactions',label:'Transactions',icon:Activity}] as const).map(({id,label,icon:Icon})=><button key={id} className={tab===id?'active':''} onClick={()=>{setTab(id);setStatus('ALL');setCurrency('ALL')}}><Icon/>{label}<em>{data[id].length.toLocaleString()}</em></button>)}</nav>
