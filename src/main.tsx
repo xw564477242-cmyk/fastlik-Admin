@@ -14,6 +14,8 @@ import './wallet-business.css'
 import './business-dashboards.css'
 import './wallet-business-fixes.css'
 import './card-processor-acceptance.css'
+import './sprint06-business.css'
+import './sprint07-business.css'
 import './sprint09-business.css'
 import './error-boundary.css'
 
