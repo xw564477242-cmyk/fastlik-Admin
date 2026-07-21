@@ -11,6 +11,7 @@ export type RiskDashboard={generatedAt:string;summary:{transactionCount:number;d
 export type SandboxCustomer={id:string;externalUserId:string;providerCustomerRef:string}
 export type ProcessorCard={id:string;customerId:string;environment:string;provider:string;providerPublicToken:string;type:string;status:string;maskedPan?:string;last4?:string;expiryMonth?:number;expiryYear?:number;currency:string;alias?:string;balance?:ProcessorCardBalance|null}
 export type ProcessorCardBalance={availableBalanceMinor:string;currentBalanceMinor:string;pendingAmountMinor:string;currency:string;updatedAt?:string}
+export type SandboxCardSecret={cvv?:string;expiresAt?:string}
 
 const keyName='fastlink_admin_api_key'
 export const getAdminKey=()=>sessionStorage.getItem(keyName)||''
@@ -43,11 +44,14 @@ export const walletBusinessApi={
  settlementDashboard:(tenantId:string,key:string)=>adminRequest<SettlementDashboard>(`/admin/tenants/${tenantId}/dashboards/settlement?environment=SANDBOX`,key),
  riskDashboard:(tenantId:string,key:string)=>adminRequest<RiskDashboard>(`/admin/tenants/${tenantId}/dashboards/risk?environment=SANDBOX`,key),
  createCardCustomer:(tenantId:string,key:string,externalUserId:string)=>adminRequest<SandboxCustomer>(`/admin/tenants/${tenantId}/card-sandbox/customers`,key,body({externalUserId})),
- createProcessorCard:(tenantId:string,key:string,customerId:string,idempotencyKey:string)=>adminRequest<ProcessorCard>('/cards/create',key,body({tenantId,customerId,cardProduct:100,cardHolder:{firstName:'FastLink',lastName:'Sandbox'},currency:'USD',alias:'Sprint-03 Acceptance',idempotencyKey})),
+ createProcessorCard:(tenantId:string,key:string,customerId:string,idempotencyKey:string,cardType:'VIRTUAL'|'PHYSICAL'='VIRTUAL',currency='USD')=>adminRequest<ProcessorCard>('/cards',key,body({tenantId,customerId,cardProduct:100,cardHolder:{firstName:'FastLink',lastName:'Sandbox'},currency,alias:`Sprint-06 ${cardType}`,idempotencyKey,cardType,...(cardType==='PHYSICAL'?{deliveryAddress:{addressLine1:'FastLink UAT Delivery',city:'Kuala Lumpur',country:'MY',postalCode:'50000'}}:{})})),
  retrieveProcessorCard:(tenantId:string,key:string,cardId:string)=>adminRequest<ProcessorCard>(`/cards/${cardId}?tenantId=${encodeURIComponent(tenantId)}`,key),
  freezeProcessorCard:(tenantId:string,key:string,cardId:string,idempotencyKey:string)=>adminRequest<ProcessorCard>('/cards/freeze',key,body({tenantId,cardId,idempotencyKey})),
  unfreezeProcessorCard:(tenantId:string,key:string,cardId:string,idempotencyKey:string)=>adminRequest<ProcessorCard>('/cards/unfreeze',key,body({tenantId,cardId,idempotencyKey})),
  processorCardBalance:(tenantId:string,key:string,cardId:string)=>adminRequest<ProcessorCardBalance>(`/cards/balance?tenantId=${encodeURIComponent(tenantId)}&cardId=${encodeURIComponent(cardId)}`,key),
+ processorCardTransactions:(key:string,cardId:string)=>adminRequest<Array<Record<string,unknown>>>(`/v1/cards/${encodeURIComponent(cardId)}/transactions`,key),
+ setSandboxPin:(tenantId:string,key:string,cardId:string,pin:string)=>adminRequest<{pinSet:boolean}>(`/admin/tenants/${tenantId}/card-sandbox/cards/${cardId}/pin`,key,body({pin})),
+ revealSandboxCvv:(tenantId:string,key:string,cardId:string)=>adminRequest<SandboxCardSecret>(`/admin/tenants/${tenantId}/card-sandbox/cards/${cardId}/cvv`,key),
  createWallet:(tenantId:string,key:string,customerId:string,name:string)=>adminRequest<WalletAccount>(`/admin/tenants/${tenantId}/wallet/accounts`,key,body({environment:'SANDBOX',customerId,assetCode:'USD',name})),
  deposit:(tenantId:string,key:string,walletAccountId:string,amount:string,idempotencyKey:string)=>adminRequest<any>(`/admin/tenants/${tenantId}/wallet/deposits`,key,body({environment:'SANDBOX',idempotencyKey,assetCode:'USD',amount,walletAccountId,externalReference:'ADMIN_ACCEPTANCE_FLOW'})),
  transfer:(tenantId:string,key:string,sourceAccountId:string,destinationAccountId:string,amount:string,idempotencyKey:string)=>adminRequest<any>(`/admin/tenants/${tenantId}/wallet/transfers`,key,body({environment:'SANDBOX',idempotencyKey,assetCode:'USD',amount,sourceAccountId,destinationAccountId,externalReference:'ADMIN_ACCEPTANCE_FLOW'})),
