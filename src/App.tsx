@@ -3,8 +3,11 @@ import { Activity, AlertTriangle, Bell, Boxes, Building2, CheckCircle2, ChevronD
 import {AdminRole} from './LoginScreen'
 import CardCenter from './CardCenter'
 import BusinessOperationsDashboard from './BusinessOperationsDashboard'
+import RoleManagement from './RoleManagement'
+import MerchantTestingDashboard from './MerchantTestingDashboard'
+import CardHistory from './CardHistory'
 
-type NavId='overview'|'tenants'|'whitelabel'|'programs'|'cardcenter'|'subsystems'|'funds'|'dashboards'|'revenue'|'sandbox'|'api'|'operations'|'risk'|'permissions'|'system'
+type NavId='overview'|'tenants'|'whitelabel'|'programs'|'cardcenter'|'cardhistory'|'subsystems'|'funds'|'dashboards'|'merchanttesting'|'revenue'|'sandbox'|'api'|'operations'|'risk'|'permissions'|'system'
 type Toast={text:string;type:'ok'|'warn'}|null
 type Tenant={id:string;name:string;country:string;model:'White Label'|'OEM'|'ODM';status:'运行中'|'审核中'|'暂停';users:number;cards:number;volume:number;kyb:string;brand:string}
 type Program={id:string;tenant:string;name:string;scheme:string;type:string;status:string;issued:number;bin:string}
@@ -17,24 +20,26 @@ const nav=[
 {id:'whitelabel' as NavId,label:'白标 / OEM / ODM',icon:Palette},
 {id:'programs' as NavId,label:'卡项目管理',icon:CreditCard},
 {id:'cardcenter' as NavId,label:'Card Center',icon:WalletCards},
+{id:'cardhistory' as NavId,label:'Card History',icon:FileCog},
 {id:'subsystems' as NavId,label:'子系统中心',icon:Boxes},
 {id:'funds' as NavId,label:'资金池与清算',icon:Landmark},
 {id:'dashboards' as NavId,label:'业务运营看板',icon:Activity},
+{id:'merchanttesting' as NavId,label:'Merchant / Testing',icon:Building2},
 {id:'revenue' as NavId,label:'费率与收入分成',icon:CircleDollarSign},
 {id:'sandbox' as NavId,label:'Developer Sandbox',icon:Code2},
 {id:'api' as NavId,label:'API 与 Webhook',icon:Webhook},
 {id:'operations' as NavId,label:'终端用户运营',icon:Users},
 {id:'risk' as NavId,label:'风控与合规',icon:ShieldCheck,badge:6},
-{id:'permissions' as NavId,label:'管理权限中心',icon:LockKeyhole},
+{id:'permissions' as NavId,label:'Role Management',icon:LockKeyhole},
 {id:'system' as NavId,label:'系统设置与审计',icon:Settings}]
 
 const roleAccess:Record<AdminRole,NavId[]>={
  'Platform Super Admin':nav.map(x=>x.id),
- 'Tenant Administrator':['overview','tenants','whitelabel','programs','cardcenter','subsystems','dashboards','operations','risk'],
- 'Treasury Operator':['overview','funds','dashboards','revenue','system'],
- 'Compliance Officer':['overview','tenants','dashboards','operations','risk','system'],
- 'Developer':['overview','cardcenter','subsystems','dashboards','sandbox','api','system'],
- 'Read Only Auditor':['overview','tenants','funds','dashboards','revenue','risk','permissions','system']
+ 'Tenant Administrator':['overview','tenants','whitelabel','programs','cardcenter','cardhistory','subsystems','dashboards','merchanttesting','operations','risk'],
+ 'Treasury Operator':['overview','funds','dashboards','merchanttesting','revenue','system'],
+ 'Compliance Officer':['overview','tenants','cardhistory','dashboards','merchanttesting','operations','risk','system'],
+ 'Developer':['overview','cardcenter','cardhistory','subsystems','dashboards','merchanttesting','sandbox','api','system'],
+ 'Read Only Auditor':['overview','tenants','cardhistory','funds','dashboards','merchanttesting','revenue','risk','permissions','system']
 }
 
 const seedTenants:Tenant[]=[
@@ -81,7 +86,7 @@ export default function App({role,onLogout,onOpenTenant,onOpenWhiteLabel,onOpenS
  const toggleTenant=(id:string)=>{setTenants(v=>v.map(t=>t.id===id?{...t,status:t.status==='暂停'?'运行中':'暂停'}:t));notify('租户状态已更新')}
  const settle=()=>{setReserve(v=>({...v,fiat:v.fiat-v.settlement,settlement:0}));notify('测试清算批次已完成')}
  return <div className="app-shell"><aside className={`sidebar ${mobile?'open':''}`}><div className="brand"><div className="brand-mark">F</div><div><b>FastLink</b><span>FINANCIAL SAAS CONTROL</span></div><button className="mobile-close" onClick={()=>setMobile(false)}><X/></button></div><div className="sandbox-badge"><i/>SaaS Sandbox · 多租户模拟数据</div><nav>{visibleNav.map(({id,label,icon:Icon,badge})=><button key={id} className={active===id?'active':''} onClick={()=>switchPage(id)}><Icon size={18}/><span>{label}</span>{badge&&<em>{badge}</em>}</button>)}</nav><div className="sidebar-foot"><div className="system-dot"><i/>所有测试服务正常</div><button onClick={onLogout}><LogOut size={17}/>退出登录</button></div></aside>{mobile&&<div className="scrim" onClick={()=>setMobile(false)}/>}<main><header className="topbar"><div className="title-wrap"><button className="menu-btn" onClick={()=>setMobile(true)}><Menu/></button><div><h1>{current.label}</h1><p>FastLink Financial SaaS Platform · Sandbox V1</p></div></div><div className="top-actions"><span className="role-badge">{role}</span><select className="tenant-select" value={tenantView} onChange={e=>setTenantView(e.target.value)}><option>FastLink Platform</option>{tenants.map(t=><option key={t.id}>{t.name}</option>)}</select><label className="search-box"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索租户、卡项目、用户..."/></label><button className="icon-btn"><Bell size={18}/><i/></button></div></header><div className="page-content">
- {active==='overview'&&<Overview tenants={tenants} reserve={reserve} setActive={switchPage}/>} {active==='tenants'&&<Tenants rows={filteredTenants} add={addTenant} toggle={toggleTenant} notify={notify} open={onOpenTenant}/>} {active==='whitelabel'&&<WhiteLabel notify={notify} open={onOpenWhiteLabel}/>} {active==='programs'&&<Programs rows={programs} setRows={setPrograms} notify={notify}/>} {active==='cardcenter'&&<CardCenter notify={notify}/>} {active==='subsystems'&&<Subsystems open={onOpenSubsystem}/>} {active==='funds'&&<Funds reserve={reserve} setReserve={setReserve} settle={settle} notify={notify} open={onOpenTreasury}/>} {active==='dashboards'&&<BusinessOperationsDashboard notify={notify}/>} {active==='revenue'&&<Revenue notify={notify}/>} {active==='sandbox'&&<Sandbox runs={sandboxRuns} setRuns={setSandboxRuns} notify={notify}/>} {active==='api'&&<ApiCenter notify={notify}/>} {active==='operations'&&<Operations notify={notify}/>} {active==='risk'&&<Risk notify={notify}/>} {active==='permissions'&&<Permissions roles={roles} setRoles={setRoles} notify={notify}/>} {active==='system'&&<System notify={notify}/>} </div></main>{toast&&<div className={`toast ${toast.type}`}>{toast.type==='ok'?<CheckCircle2/>:<AlertTriangle/>}{toast.text}</div>}</div>
+ {active==='overview'&&<Overview tenants={tenants} reserve={reserve} setActive={switchPage}/>} {active==='tenants'&&<Tenants rows={filteredTenants} add={addTenant} toggle={toggleTenant} notify={notify} open={onOpenTenant}/>} {active==='whitelabel'&&<WhiteLabel notify={notify} open={onOpenWhiteLabel}/>} {active==='programs'&&<Programs rows={programs} setRows={setPrograms} notify={notify}/>} {active==='cardcenter'&&<CardCenter notify={notify}/>} {active==='cardhistory'&&<CardHistory notify={notify}/>} {active==='subsystems'&&<Subsystems open={onOpenSubsystem}/>} {active==='funds'&&<Funds reserve={reserve} setReserve={setReserve} settle={settle} notify={notify} open={onOpenTreasury}/>} {active==='dashboards'&&<BusinessOperationsDashboard notify={notify}/>} {active==='merchanttesting'&&<MerchantTestingDashboard notify={notify}/>} {active==='revenue'&&<Revenue notify={notify}/>} {active==='sandbox'&&<Sandbox runs={sandboxRuns} setRuns={setSandboxRuns} notify={notify}/>} {active==='api'&&<ApiCenter notify={notify}/>} {active==='operations'&&<Operations notify={notify}/>} {active==='risk'&&<Risk notify={notify}/>} {active==='permissions'&&<RoleManagement notify={notify}/>} {active==='system'&&<System notify={notify}/>} </div></main>{toast&&<div className={`toast ${toast.type}`}>{toast.type==='ok'?<CheckCircle2/>:<AlertTriangle/>}{toast.text}</div>}</div>
 }
 
 function Overview({tenants,reserve,setActive}:{tenants:Tenant[];reserve:any;setActive:(n:NavId)=>void}){return <><section className="hero saas-hero"><div><span>FASTLINK PLATFORM CONTROL PLANE</span><h2>多租户金融 SaaS 运营中枢</h2><p>统一管理白标、OEM、ODM、U卡发行、钱包、支付、换汇、清算与合作方开放平台。</p></div><button className="primary-btn" onClick={()=>setActive('subsystems')}>查看全部子系统</button></section><section className="metrics-grid"><Stat label="活跃租户" value={`${tenants.filter(t=>t.status==='运行中').length}`} sub="4 个已签约项目"/><Stat label="终端用户" value="22,870" sub="跨 4 个租户"/><Stat label="已发行卡片" value="13,040" sub="虚拟卡与实体卡"/><Stat label="月度平台收入" value="$428,600" sub="SaaS费 + 发卡 + 分成"/></section><section className="content-grid"><article className="panel"><div className="panel-title"><div><h3>租户经营表现</h3><p>按交易规模和卡片发行量排序</p></div></div><table><thead><tr><th>合作方</th><th>模式</th><th>用户</th><th>卡片</th><th>交易额</th><th>状态</th></tr></thead><tbody>{tenants.map(t=><tr key={t.id}><td><b>{t.name}</b><small className="cell-sub">{t.country}</small></td><td>{t.model}</td><td>{t.users.toLocaleString()}</td><td>{t.cards.toLocaleString()}</td><td>{money(t.volume)}</td><td><Tag v={t.status}/></td></tr>)}</tbody></table></article><article className="panel"><div className="panel-title"><div><h3>平台资金与清算</h3><p>模拟总资金视图</p></div></div><div className="fund-stack"><div><span>公司 USDT 资金池</span><b>{money(reserve.usdt)}</b></div><div><span>Sponsor Bank 法币准备金</span><b>{money(reserve.fiat)}</b></div><div><span>待清算敞口</span><b>{money(reserve.settlement)}</b></div><div><span>商户支付备付金</span><b>{money(reserve.merchant)}</b></div></div><button className="wide-btn" onClick={()=>setActive('permissions')}>进入权限管理中心</button></article></section></>}
