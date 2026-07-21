@@ -22,15 +22,17 @@ type UnknownRecord=Record<string,unknown>
 const record=(value:unknown):UnknownRecord=>value!==null&&typeof value==='object'&&!Array.isArray(value)?value as UnknownRecord:{}
 const list=(value:unknown):unknown[]=>Array.isArray(value)?value:[]
 const text=(value:unknown,fallback='—')=>typeof value==='string'||typeof value==='number'?String(value):fallback
+const requiredChecks=['userRegistered','kycApproved','fiveCurrencyWallets','virtualCardCreated','merchantPaymentSettled','walletTransactionWritten','cardTransactionWritten','journalWritten','treasuryUpdated','settlementBatchCreated','auditWritten','trialBalanceBalanced']
 
 /** Keep a partially deployed API response from crashing the whole Admin UI. */
 export function normalizeBusinessFlowEvidence(payload:unknown):BusinessFlowEvidence{
  const source=record(payload)
  const customer=record(source.customer)
  const checks=record(source.checks)
+ const safeChecks=Object.fromEntries([...new Set([...requiredChecks,...Object.keys(checks)])].map(key=>[key,checks[key]===true]))
  return {
-  traceId:text(source.traceId,'unknown-trace'),environment:'SANDBOX',status:source.status==='COMPLETED'?'COMPLETED':'INCOMPLETE',
-  checks:Object.fromEntries(Object.entries(checks).map(([key,value])=>[key,value===true])),
+  traceId:text(source.traceId,'unknown-trace'),environment:'SANDBOX',status:source.status==='COMPLETED'&&Object.values(safeChecks).every(Boolean)?'COMPLETED':'INCOMPLETE',
+  checks:safeChecks,
   customer:{id:text(customer.id),externalUserId:text(customer.externalUserId),email:text(customer.email),kycStatus:text(customer.kycStatus)},
   wallets:list(source.wallets).map(item=>{const row=record(item);return{id:text(row.id),assetCode:text(row.assetCode),postedBalance:text(row.postedBalance,'0')}}),
   cards:list(source.cards).map(item=>{const row=record(item);return{id:text(row.id),type:text(row.type),status:text(row.status),last4:text(row.last4)}}),
