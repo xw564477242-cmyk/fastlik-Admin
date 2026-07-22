@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "lint": "tsc --noEmit",
     "preview": "vite preview",
-    "test": "node scripts/verify-sprint12-production.mjs"
+    "test": "node scripts/verify-sprint12-production.mjs && node scripts/verify-thredd-admin.mjs"
   },
   "dependencies": {
     "lucide-react": "0.468.0",

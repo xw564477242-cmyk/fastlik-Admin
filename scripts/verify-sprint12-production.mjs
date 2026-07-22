@@ -12,7 +12,7 @@ const main=read('src/main.tsx')
 const required=[
  ['Data Source label',consoleSource.includes('Data Source:')],
  ['Sandbox source',consoleSource.includes("'SANDBOX'")],
- ['UAT source',consoleSource.includes("'UAT'")],
+ ['Official UAT source',consoleSource.includes("'OFFICIAL_UAT'")],
  ['Production source',consoleSource.includes("'PRODUCTION'")],
  ['No fallback statement',consoleSource.includes('NO MOCK FALLBACK')],
  ['Trace endpoint',apiSource.includes('/operations/traces/')],
