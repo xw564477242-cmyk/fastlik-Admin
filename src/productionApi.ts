@@ -42,6 +42,8 @@ export type IntegrationReadiness={
 export type CertificateMetadata={configured:boolean;status:'PASS'|'FAIL'|'BLOCKED';validFrom?:string;validTo?:string;fingerprint256?:string;reason?:string}
 export type CardRecord={id:string;customerId:string;environment:DataSource;provider:string;providerPublicToken:string;type:string;status:string;maskedPan?:string;last4?:string;expiryMonth?:number;expiryYear?:number;currency:string;alias?:string;balance?:{availableBalanceMinor:string;currentBalanceMinor:string;pendingAmountMinor:string;currency:string;updatedAt:string};holder?:Record<string,unknown>}
 export type TransactionDetail={id:string;providerTransactionId:string;cardTransactionId:string;cardId:string;lifecycleId?:string;typeCode?:string;typeDescription?:string;statusCode?:string;statusDescription?:string;occurredAt?:string;stan?:string;rrn?:string;authorisationCode?:string;cardNetwork?:string;networkReference?:string;responseSource?:string;responseReason?:string;amount?:Record<string,unknown>;fees:Array<Record<string,unknown>>;merchant?:Record<string,unknown>;pos?:Record<string,unknown>;iso8583?:Record<string,unknown>;avs?:Record<string,unknown>;security?:Record<string,unknown>;settlements:Array<Record<string,unknown>>;lifecycle:Array<Record<string,unknown>>;audits:Array<Record<string,unknown>>;card:Record<string,unknown>}
+// THR-ADM-001 — backend returns a secret-safe EHI authorization projection.
+export type EhiAuthorization={id:string;providerTransactionId:string;providerPublicToken:string;mtid:string;transactionType:string;amountMinor:string;currency:string;status:'RECEIVED'|'APPROVED'|'DECLINED';responseStatus:string;acknowledgement:string;decisionReason:string;latencyMs:number;duplicateCount:number;lifecycleTraceId?:string;createdAt:string}
 export type EvidenceSummary={
  generatedAt:string;dataSource:string;status:'PASS'|'BLOCKED';artifactCount:number;immutable:true
  categories:Array<{
@@ -96,6 +98,7 @@ export const productionApi={
  dailyClosing:(base:string,token:string,tenantId:string,environment:DataSource)=>request<FinancialOperationalReport>(base,`/admin/tenants/${tenantId}/settlement/daily-closing?${query(environment)}`,token),
  cards:(base:string,token:string,tenantId:string,input:Record<string,string|number|undefined>={})=>request<Page<CardRecord>>(base,`/admin/tenants/${tenantId}/cards?${filters({...input,limit:100})}`,token),
  transactions:(base:string,token:string,tenantId:string,input:Record<string,string|number|undefined>={})=>request<Page<TransactionDetail>>(base,`/admin/tenants/${tenantId}/transactions?${filters({...input,limit:100})}`,token),
+ ehiAuthorizations:(base:string,token:string,tenantId:string,environment:DataSource)=>request<EhiAuthorization[]>(base,`/admin/tenants/${tenantId}/thredd/ehi/authorizations?${query(environment)}`,token),
  cardTimeline:(base:string,token:string,tenantId:string,cardId:string)=>request<Array<Record<string,unknown>>>(base,`/admin/tenants/${tenantId}/cards/${encodeURIComponent(cardId)}/timeline`,token),
  cardAction:(base:string,token:string,tenantId:string,cardId:string,action:'freeze'|'unfreeze',idempotencyKey:string)=>request<CardRecord>(base,`/admin/tenants/${tenantId}/cards/${encodeURIComponent(cardId)}/${action}`,token,'POST',{idempotencyKey}),
 }

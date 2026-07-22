@@ -26,6 +26,9 @@ const required=[
  ['Daily Closing endpoint',apiSource.includes('/settlement/daily-closing')],
  ['Card Explorer endpoint',apiSource.includes('/cards?')],
  ['Transaction Explorer endpoint',apiSource.includes('/transactions?')],
+ ['THR-EHI-001 patch reference',consoleSource.includes('THR-EHI-001')],
+ ['Inbound authorization endpoint',apiSource.includes('/thredd/ehi/authorizations?')],
+ ['EHI Authorization explorer',consoleSource.includes("label:'EHI Authorization'")],
  ['Certificate metadata view',consoleSource.includes('certificateMetadata')],
  ['Known Gap register',consoleSource.includes('KG-001')],
 ]

@@ -1,12 +1,12 @@
 import {FormEvent,useMemo,useState} from 'react'
 import {Activity,AlertTriangle,BookOpen,CheckCircle2,CreditCard,Database,Download,FileJson,FileWarning,KeyRound,Landmark,Link2,ListFilter,RefreshCw,Search,Settings,ShieldCheck,Store,Unplug} from 'lucide-react'
 import {exportCsv,exportExcel,exportPdf} from './exporters'
-import {DEFAULT_API,productionApi,type AdminSession,type CardRecord,type Contamination,type DataSource,type EvidenceSummary,type FinancialOperationalReport,type Health,type IntegrationReadiness,type Journal,type Merchant,type MerchantPayment,type Reconciliation,type Tenant,type TraceReport,type TransactionDetail,type TreasuryPosition,type TrialBalance,type WalletAccount} from './productionApi'
+import {DEFAULT_API,productionApi,type AdminSession,type CardRecord,type Contamination,type DataSource,type EhiAuthorization,type EvidenceSummary,type FinancialOperationalReport,type Health,type IntegrationReadiness,type Journal,type Merchant,type MerchantPayment,type Reconciliation,type Tenant,type TraceReport,type TransactionDetail,type TreasuryPosition,type TrialBalance,type WalletAccount} from './productionApi'
 
-type Tab='readiness'|'cards'|'transactions'|'treasury'|'ledger'|'settlement'|'merchant'|'configuration'|'gaps'|'evidence'|'trace'
-type Snapshot={health:Health;readiness:IntegrationReadiness;contamination:Contamination;cards:CardRecord[];transactions:TransactionDetail[];treasury:TreasuryPosition[];trial:TrialBalance[];reconciliation:Reconciliation;accounts:WalletAccount[];journals:Journal[];merchants:Merchant[];payments:MerchantPayment[];evidence:EvidenceSummary;dailyClosing:FinancialOperationalReport;loadedAt:string}
+type Tab='readiness'|'cards'|'transactions'|'authorizations'|'treasury'|'ledger'|'settlement'|'merchant'|'configuration'|'gaps'|'evidence'|'trace'
+type Snapshot={health:Health;readiness:IntegrationReadiness;contamination:Contamination;cards:CardRecord[];transactions:TransactionDetail[];authorizations:EhiAuthorization[];treasury:TreasuryPosition[];trial:TrialBalance[];reconciliation:Reconciliation;accounts:WalletAccount[];journals:Journal[];merchants:Merchant[];payments:MerchantPayment[];evidence:EvidenceSummary;dailyClosing:FinancialOperationalReport;loadedAt:string}
 const tabs:Array<{id:Tab;label:string;icon:typeof Activity}>=[
- {id:'readiness',label:'Readiness',icon:ShieldCheck},{id:'cards',label:'Card Explorer',icon:CreditCard},{id:'transactions',label:'Transaction Explorer',icon:ListFilter},
+ {id:'readiness',label:'Readiness',icon:ShieldCheck},{id:'cards',label:'Card Explorer',icon:CreditCard},{id:'transactions',label:'Transaction Explorer',icon:ListFilter},{id:'authorizations',label:'EHI Authorization',icon:Activity},
  {id:'treasury',label:'Treasury',icon:Landmark},{id:'ledger',label:'Ledger / Journal',icon:BookOpen},{id:'settlement',label:'Settlement',icon:RefreshCw},
  {id:'merchant',label:'Merchant',icon:Store},{id:'configuration',label:'Partner Config',icon:Settings},{id:'gaps',label:'Known Gaps',icon:FileWarning},
  {id:'evidence',label:'Evidence / Audit',icon:FileJson},{id:'trace',label:'Trace ID',icon:Link2},
@@ -56,12 +56,12 @@ export default function ProductionConsole(){
   if(!id||!token)return
   setBusy('load');setError('');setSnapshot(null);setTrace(null)
   try{
-   const[health,readiness,contamination,cards,transactions,treasury,trial,reconciliation,accounts,journals,merchants,payments,evidence,dailyClosing]=await Promise.all([
-    productionApi.systemReadiness(base),productionApi.readiness(base,token,id),productionApi.contamination(base,token,id,source),productionApi.cards(base,token,id),productionApi.transactions(base,token,id),
+   const[health,readiness,contamination,cards,transactions,authorizations,treasury,trial,reconciliation,accounts,journals,merchants,payments,evidence,dailyClosing]=await Promise.all([
+    productionApi.systemReadiness(base),productionApi.readiness(base,token,id),productionApi.contamination(base,token,id,source),productionApi.cards(base,token,id,{environment:source}),productionApi.transactions(base,token,id,{environment:source}),productionApi.ehiAuthorizations(base,token,id,source),
     productionApi.treasury(base,token,id,source),productionApi.trialBalance(base,token,id,source),productionApi.reconciliation(base,token,id,source),productionApi.accounts(base,token,id,source),productionApi.journals(base,token,id,source),
     productionApi.merchants(base,token,id,source),productionApi.merchantPayments(base,token,id,source),productionApi.evidenceSummary(base,token,id,source),productionApi.dailyClosing(base,token,id,source),
    ])
-   setSnapshot({health,readiness,contamination,cards:cards.data,transactions:transactions.data,treasury:treasury.positions,trial,reconciliation,accounts,journals,merchants:merchants.data,payments:payments.data,evidence,dailyClosing,loadedAt:new Date().toISOString()})
+   setSnapshot({health,readiness,contamination,cards:cards.data,transactions:transactions.data,authorizations,treasury:treasury.positions,trial,reconciliation,accounts,journals,merchants:merchants.data,payments:payments.data,evidence,dailyClosing,loadedAt:new Date().toISOString()})
   }catch(value){setError(value instanceof Error?value.message:'读取生产数据失败')}
   finally{setBusy('')}
  }
@@ -76,7 +76,7 @@ export default function ProductionConsole(){
  return <div className="prod-app">
   <header className="prod-top"><div className="prod-brand"><span>F</span><div><b>FastLink</b><small>PRODUCTION READINESS CONTROL</small></div></div><div className="source-control"><strong>Data Source:</strong>{sources.map(value=><button key={value} className={source===value?'active':''} onClick={()=>chooseSource(value)}>{value}</button>)}</div><div className={`connection ${sessionToken?'online':'offline'}`}><i/>{sessionToken?`${source} CONNECTED`:'NOT CONNECTED'}</div></header>
   <section className="connection-panel">
-   <div><span>THREDD FULL API · NO DATA-SOURCE FALLBACK</span><h1>Production Readiness Console</h1><p>所有数字只来自所选 FastLink API。MOCK、LOCAL、SANDBOX、UAT 与 PRODUCTION 明确隔离；连接失败时不生成替代数据。</p></div>
+   <div><span>THREDD CONTRACT V2.0 · THR-EHI-001 · NO DATA-SOURCE FALLBACK</span><h1>Production Readiness Console</h1><p>所有数字只来自所选 FastLink API。MOCK、LOCAL、SANDBOX、UAT 与 PRODUCTION 明确隔离；连接失败时不生成替代数据。</p></div>
    <form onSubmit={connect}><label>API Base<input value={base} onChange={event=>setBase(event.target.value)} spellCheck={false}/></label><label>Tenant ID / Slug<input value={tenantInput} onChange={event=>setTenantInput(event.target.value)} autoComplete="organization"/></label><label>管理员邮箱<input type="email" value={emailInput} onChange={event=>setEmailInput(event.target.value)} autoComplete="username"/></label><label>密码<div><KeyRound/><input type="password" value={passwordInput} onChange={event=>setPasswordInput(event.target.value)} autoComplete="current-password" placeholder="登录后立即清空；不会写入浏览器存储"/></div></label><button disabled={busy==='connect'}>{busy==='connect'?'登录中…':'管理员登录'}</button>{sessionToken&&<button type="button" className="secondary" onClick={()=>void disconnect()}><Unplug/>退出</button>}</form>
   </section>
   {(notice||error)&&<div className={`prod-message ${error?'error':''}`}>{error||notice}</div>}
@@ -88,6 +88,7 @@ export default function ProductionConsole(){
    {snapshot&&active==='readiness'&&<Readiness snapshot={snapshot} gate={gate}/>} 
    {snapshot&&active==='cards'&&<CardExplorer rows={snapshot.cards} selectedCardId={selectedCardId} timeline={timeline} busy={busy} selectCard={selectCard} changeStatus={changeCardStatus} onExport={(rows,format)=>exportRows(`fastlink-${source.toLowerCase()}-cards`,rows,format)}/>}
    {snapshot&&active==='transactions'&&<TransactionExplorer rows={snapshot.transactions} onExport={(rows,format)=>exportRows(`fastlink-${source.toLowerCase()}-transactions`,rows,format)}/>}
+   {snapshot&&active==='authorizations'&&<AuthorizationExplorer rows={snapshot.authorizations} onExport={(rows,format)=>exportRows(`fastlink-${source.toLowerCase()}-ehi-authorizations`,rows,format)}/>}
    {snapshot&&active==='treasury'&&<Treasury rows={snapshot.treasury} onExport={(format)=>exportRows(`fastlink-${source.toLowerCase()}-treasury`,snapshot.treasury as unknown as Array<Record<string,unknown>>,format)}/>} 
    {snapshot&&active==='ledger'&&<Ledger accounts={snapshot.accounts} trial={snapshot.trial} journals={snapshot.journals} onExport={(format)=>exportRows(`fastlink-${source.toLowerCase()}-ledger`,snapshot.journals as unknown as Array<Record<string,unknown>>,format)}/>} 
    {snapshot&&active==='settlement'&&<Settlement value={snapshot.reconciliation} onExport={(format)=>exportRows(`fastlink-${source.toLowerCase()}-settlement`,snapshot.reconciliation.pendingChecks as unknown as Array<Record<string,unknown>>,format)}/>} 
@@ -121,6 +122,12 @@ function TransactionExplorer({rows,onExport}:{rows:TransactionDetail[];onExport:
 function Detail({label,value:detail}:{label:string;value:unknown}){return <div><span>{label}</span><strong className="detail-value">{value(detail)}</strong></div>}
 function value(input:unknown){if(input===null||input===undefined)return '—';if(typeof input==='string'||typeof input==='number'||typeof input==='boolean')return String(input);return JSON.stringify(input)}
 
+// THR-ADM-001 — renders only the backend safe projection, never a raw EHI payload.
+function AuthorizationExplorer({rows,onExport}:{rows:EhiAuthorization[];onExport:(rows:Array<Record<string,unknown>>,format:'csv'|'xls'|'pdf')=>void}){
+ const[term,setTerm]=useState('');const filtered=useMemo(()=>rows.filter(row=>!term||[row.providerTransactionId,row.providerPublicToken,row.lifecycleTraceId,row.decisionReason,row.responseStatus].some(value=>String(value??'').toLowerCase().includes(term.toLowerCase()))),[rows,term]);
+ return <section className="panel"><div className="panel-head"><div><h3>Inbound EHI Authorization · THR-EHI-001 ({filtered.length})</h3><p>Thredd → AuthorizationGateway → Engine → Wallet → Ledger → Treasury → Decision → Response. Secret-safe projection only.</p></div><ExportButtons run={format=>onExport(filtered as unknown as Array<Record<string,unknown>>,format)}/></div><div className="explorer-filters"><input value={term} onChange={event=>setTerm(event.target.value)} placeholder="Transaction / Token / Trace / Decision"/></div><table><thead><tr><th>Provider Transaction</th><th>Card Token</th><th>Amount</th><th>Decision</th><th>Response</th><th>Runtime</th></tr></thead><tbody>{filtered.map(row=><tr key={row.id}><td><b>{row.providerTransactionId}</b><small>{row.lifecycleTraceId||'No lifecycle trace'}</small></td><td>{row.providerPublicToken}</td><td>{row.amountMinor} minor · {row.currency}</td><td>{row.status}<small>{row.decisionReason}</small></td><td>DE39 {row.responseStatus}<small>Ack {row.acknowledgement} · duplicates {row.duplicateCount}</small></td><td>{row.latencyMs} ms<small>{new Date(row.createdAt).toLocaleString()}</small></td></tr>)}</tbody></table>{!filtered.length&&<p>No persisted authorization records for this exact data source. No fallback data was generated.</p>}</section>
+}
+
 function PartnerConfiguration({readiness}:{readiness:IntegrationReadiness}){const thredd=readiness.providers.thredd;return <><section className="panel"><h3>Partner Configuration · {thredd.configurationStatus}</h3><p>Secret-safe presence checks only. Values, tokens, private keys and certificates are never returned.</p><div className="count-grid">{thredd.checks.map(check=><div key={check.key}><span>{check.key}</span><strong>{check.status}</strong><small>{check.reason||'Configured'}</small></div>)}</div></section><section className="two-col">{Object.entries(readiness.certificateMetadata).map(([name,certificate])=><article className="panel" key={name}><h3>{name} certificate · {certificate.status}</h3><div className="line"><span>Configured</span><b>{String(certificate.configured)}</b></div><div className="line"><span>Valid From</span><b>{certificate.validFrom||'—'}</b></div><div className="line"><span>Valid To</span><b>{certificate.validTo||'—'}</b></div><div className="line"><span>SHA-256 Fingerprint</span><b>{certificate.fingerprint256||'—'}</b></div>{certificate.reason&&<p className="gate-copy">{certificate.reason}</p>}</article>)}</section></>}
 
 const knownGaps=[
@@ -129,7 +136,7 @@ const knownGaps=[
  ['KG-003','Remove Merchant from Disallow List exact method/path absent from supplied collection'],
  ['KG-004','Custom PAN and card-level override routes use an unprovisioned external base URL'],
  ['KG-005','Official single-transaction endpoint contract not available; Admin detail reads normalized database records'],
- ['KG-006','Authorization, clearing, settlement, reversal, refund, reporting, EHI, CTS, risk and fraud require programme feeds/contracts'],
+ ['KG-006','EHI v5.5 inbound contract and architecture are ready; Programme Mode, PSF URL, ingress/mTLS options, Official Scope and UAT evidence remain External Dependency'],
  ['KG-007','Shared UAT database, Railway UAT secrets and real login/E2E evidence unavailable'],
 ] as const
 function KnownGaps(){return <section className="panel"><h3>Known Gap Register</h3><p>These items are explicitly BLOCKED; the client never guesses method/path or labels mock results as UAT.</p>{knownGaps.map(([id,description])=><div className="line" key={id}><div><b>{id}</b><small>{description}</small></div><Badge ok={false} label="BLOCKED"/></div>)}</section>}
