@@ -1,15 +1,16 @@
 import {FormEvent,useMemo,useState} from 'react'
 import {Activity,AlertTriangle,BookOpen,CheckCircle2,Database,Download,FileJson,KeyRound,Landmark,Link2,RefreshCw,Search,ShieldCheck,Store,Unplug,WalletCards} from 'lucide-react'
 import {exportCsv,exportExcel,exportPdf} from './exporters'
-import {DEFAULT_API,productionApi,type AdminSession,type Contamination,type DataSource,type EvidenceSummary,type FinancialOperationalReport,type Health,type IntegrationReadiness,type Journal,type Merchant,type MerchantPayment,type Reconciliation,type Tenant,type TraceReport,type TreasuryPosition,type TrialBalance,type WalletAccount} from './productionApi'
+import ThreddAdmin from './ThreddAdmin'
+import {DEFAULT_API,dataSourceLabel,productionApi,type AdminSession,type Contamination,type DataSource,type EvidenceSummary,type FinancialOperationalReport,type Health,type IntegrationReadiness,type Journal,type Merchant,type MerchantPayment,type Reconciliation,type Tenant,type TraceReport,type TreasuryPosition,type TrialBalance,type WalletAccount} from './productionApi'
 
-type Tab='readiness'|'treasury'|'ledger'|'settlement'|'merchant'|'evidence'|'trace'
+type Tab='readiness'|'thredd'|'treasury'|'ledger'|'settlement'|'merchant'|'evidence'|'trace'
 type Snapshot={health:Health;readiness:IntegrationReadiness;contamination:Contamination;treasury:TreasuryPosition[];trial:TrialBalance[];reconciliation:Reconciliation;accounts:WalletAccount[];journals:Journal[];merchants:Merchant[];payments:MerchantPayment[];evidence:EvidenceSummary;dailyClosing:FinancialOperationalReport;loadedAt:string}
 const tabs:Array<{id:Tab;label:string;icon:typeof Activity}>=[
- {id:'readiness',label:'Readiness',icon:ShieldCheck},{id:'treasury',label:'Treasury',icon:Landmark},{id:'ledger',label:'Ledger',icon:BookOpen},
+ {id:'readiness',label:'Readiness',icon:ShieldCheck},{id:'thredd',label:'Thredd Admin',icon:WalletCards},{id:'treasury',label:'Treasury',icon:Landmark},{id:'ledger',label:'Ledger',icon:BookOpen},
  {id:'settlement',label:'Settlement',icon:RefreshCw},{id:'merchant',label:'Merchant',icon:Store},{id:'evidence',label:'Evidence Center',icon:FileJson},{id:'trace',label:'Trace ID',icon:Link2},
 ]
-const sources:DataSource[]=['SANDBOX','UAT','PRODUCTION']
+ const sources:DataSource[]=['SANDBOX','OFFICIAL_UAT','PRODUCTION']
 const flat=(rows:Array<Record<string,unknown>>)=>rows.map(row=>Object.fromEntries(Object.entries(row).map(([key,value])=>[key,typeof value==='object'&&value!==null?JSON.stringify(value):value])))
 
 export default function ProductionConsole(){
@@ -37,7 +38,7 @@ export default function ProductionConsole(){
   event?.preventDefault();setBusy('connect');setError('');setNotice('');setSnapshot(null);setTrace(null)
   try{
    const health=await productionApi.health(base)
-   if(source==='UAT'){
+   if(source==='OFFICIAL_UAT'){
     setSessionToken('');setIdentity(null);setTenants([]);setTenantId('')
     setNotice(`API ${health.release} 可用，但后端尚未配置独立 UAT 数据源；已禁止回退 Sandbox。`)
     return
@@ -67,24 +68,26 @@ export default function ProductionConsole(){
   finally{setBusy('')}
  }
 
- const chooseSource=(next:DataSource)=>{setSource(next);setSessionToken('');setIdentity(null);setPasswordInput('');setTenants([]);setTenantId('');setSnapshot(null);setTrace(null);setError('');setNotice(next==='UAT'?'UAT 必须配置真实数据源；本页面不会回退 Sandbox。':'')}
+ const chooseSource=(next:DataSource)=>{setSource(next);setSessionToken('');setIdentity(null);setPasswordInput('');setTenants([]);setTenantId('');setSnapshot(null);setTrace(null);setError('');setNotice(next==='OFFICIAL_UAT'?'Official UAT 必须配置真实数据源；本页面不会回退 Sandbox。':'')}
  const disconnect=async()=>{const token=sessionToken;setSessionToken('');setIdentity(null);setPasswordInput('');setTenants([]);setTenantId('');setSnapshot(null);setTrace(null);setNotice('管理员会话已退出；令牌未写入浏览器存储。');if(token)try{await productionApi.logout(base,token)}catch{/* Local session is cleared even if remote revocation is unavailable. */}}
  const searchTrace=async(event:FormEvent)=>{event.preventDefault();if(!tenantId||!sessionToken)return;setBusy('trace');setError('');setTrace(null);try{setTrace(await productionApi.trace(base,sessionToken,tenantId,source,traceId.trim()))}catch(value){setError(value instanceof Error?value.message:'Trace 查询失败')}finally{setBusy('')}}
  const exportRows=(name:string,rows:Array<Record<string,unknown>>,format:'csv'|'xls'|'pdf')=>{if(!rows.length){setError('当前没有可导出的真实数据');return}if(format==='csv')exportCsv(name,flat(rows));else if(format==='xls')exportExcel(name,flat(rows));else exportPdf(name,flat(rows))}
 
  return <div className="prod-app">
-  <header className="prod-top"><div className="prod-brand"><span>F</span><div><b>FastLink</b><small>PRODUCTION READINESS CONTROL</small></div></div><div className="source-control"><strong>Data Source:</strong>{sources.map(value=><button key={value} className={source===value?'active':''} onClick={()=>chooseSource(value)}>{value}</button>)}</div><div className={`connection ${sessionToken?'online':'offline'}`}><i/>{sessionToken?`${source} CONNECTED`:'NOT CONNECTED'}</div></header>
+  <header className="prod-top"><div className="prod-brand"><span>F</span><div><b>FastLink</b><small>PRODUCTION READINESS CONTROL</small></div></div><div className="source-control"><strong>Data Source:</strong>{sources.map(value=><button key={value} className={source===value?'active':''} onClick={()=>chooseSource(value)}>{dataSourceLabel(value)}</button>)}</div><div className={`connection ${sessionToken?'online':'offline'}`}><i/>{sessionToken?`${dataSourceLabel(source)} CONNECTED`:'NOT CONNECTED'}</div></header>
   <section className="connection-panel">
    <div><span>SPRINT‑12 · NO MOCK FALLBACK</span><h1>Production Readiness Console</h1><p>所有数字只来自所选 FastLink API。连接失败、无租户或 UAT 未配置时显示错误，不生成替代数据。</p></div>
-   <form onSubmit={connect}><label>API Base<input value={base} onChange={event=>setBase(event.target.value)} spellCheck={false}/></label><label>Tenant ID / Slug<input value={tenantInput} onChange={event=>setTenantInput(event.target.value)} autoComplete="organization"/></label><label>管理员邮箱<input type="email" value={emailInput} onChange={event=>setEmailInput(event.target.value)} autoComplete="username"/></label><label>密码<div><KeyRound/><input type="password" value={passwordInput} onChange={event=>setPasswordInput(event.target.value)} autoComplete="current-password" placeholder="登录后立即清空；不会写入浏览器存储"/></div></label><button disabled={busy==='connect'||source==='UAT'}>{busy==='connect'?'登录中…':'管理员登录'}</button>{sessionToken&&<button type="button" className="secondary" onClick={()=>void disconnect()}><Unplug/>退出</button>}</form>
+   <form onSubmit={connect}><label>API Base<input value={base} onChange={event=>setBase(event.target.value)} spellCheck={false}/></label><label>Tenant ID / Slug<input value={tenantInput} onChange={event=>setTenantInput(event.target.value)} autoComplete="organization"/></label><label>管理员邮箱<input type="email" value={emailInput} onChange={event=>setEmailInput(event.target.value)} autoComplete="username"/></label><label>密码<div><KeyRound/><input type="password" value={passwordInput} onChange={event=>setPasswordInput(event.target.value)} autoComplete="current-password" placeholder="登录后立即清空；不会写入浏览器存储"/></div></label><button disabled={busy==='connect'||source==='OFFICIAL_UAT'}>{busy==='connect'?'登录中…':'管理员登录'}</button>{sessionToken&&<button type="button" className="secondary" onClick={()=>void disconnect()}><Unplug/>退出</button>}</form>
   </section>
   {(notice||error)&&<div className={`prod-message ${error?'error':''}`}>{error||notice}</div>}
-  <div className="prod-context"><label>Tenant<select value={tenantId} disabled={!sessionToken} onChange={event=>{setTenantId(event.target.value);void load(event.target.value)}}><option value="">选择真实租户</option>{tenants.map(row=><option key={row.id} value={row.id}>{row.brandName} · {row.id}</option>)}</select></label><span><Database/>Data Source: <b>{source}</b></span><span>Tenant: <b>{selectedTenant?.brandName||'—'}</b></span><span>User: <b>{identity?.email||'—'}</b></span><span>Roles: <b>{identity?.roles.join(', ')||'—'}</b></span><span>Permissions: <b>{identity?.permissions.join(', ')||'—'}</b></span><span>Release: <b>{snapshot?.health.release||'—'}</b></span><button disabled={!sessionToken||!!busy} onClick={()=>void load()}><RefreshCw/>刷新</button></div>
+  <div className="prod-context"><label>Tenant<select value={tenantId} disabled={!sessionToken} onChange={event=>{setTenantId(event.target.value);void load(event.target.value)}}><option value="">选择真实租户</option>{tenants.map(row=><option key={row.id} value={row.id}>{row.brandName} · {row.id}</option>)}</select></label><span><Database/>Data Source: <b>{dataSourceLabel(source)}</b></span><span>Tenant: <b>{selectedTenant?.brandName||'—'}</b></span><span>User: <b>{identity?.email||'—'}</b></span><span>Roles: <b>{identity?.roles.join(', ')||'—'}</b></span><span>Permissions: <b>{identity?.permissions.join(', ')||'—'}</b></span><span>Release: <b>{snapshot?.health.release||'—'}</b></span><button disabled={!sessionToken||!!busy} onClick={()=>void load()}><RefreshCw/>刷新</button></div>
   <nav className="prod-tabs">{tabs.map(({id,label,icon:Icon})=><button key={id} className={active===id?'active':''} onClick={()=>setActive(id)}><Icon/>{label}</button>)}</nav>
   <main className="prod-main">
    <section className="data-heading"><div><span>Data Source: {source}</span><h2>{tabs.find(row=>row.id===active)?.label} Dashboard</h2><p>{snapshot?`Last loaded ${new Date(snapshot.loadedAt).toLocaleString()}`:'请先连接并选择真实租户。'}</p></div>{snapshot&&<strong className={gate==='PASS'?'pass':'open'}>Release Gate: {gate}</strong>}</section>
-   {!snapshot&&active!=='trace'&&<Empty source={source}/>} 
+   {!snapshot&&active!=='trace'&&active!=='thredd'&&<Empty source={source}/>}
    {snapshot&&active==='readiness'&&<Readiness snapshot={snapshot} gate={gate}/>} 
+   {active==='thredd'&&sessionToken&&tenantId&&identity&&<ThreddAdmin base={base} token={sessionToken} tenantId={tenantId} source={source} identity={identity}/>}
+   {active==='thredd'&&(!sessionToken||!tenantId||!identity)&&<Empty source={source}/>}
    {snapshot&&active==='treasury'&&<Treasury rows={snapshot.treasury} onExport={(format)=>exportRows(`fastlink-${source.toLowerCase()}-treasury`,snapshot.treasury as unknown as Array<Record<string,unknown>>,format)}/>} 
    {snapshot&&active==='ledger'&&<Ledger accounts={snapshot.accounts} trial={snapshot.trial} journals={snapshot.journals} onExport={(format)=>exportRows(`fastlink-${source.toLowerCase()}-ledger`,snapshot.journals as unknown as Array<Record<string,unknown>>,format)}/>} 
    {snapshot&&active==='settlement'&&<Settlement value={snapshot.reconciliation} onExport={(format)=>exportRows(`fastlink-${source.toLowerCase()}-settlement`,snapshot.reconciliation.pendingChecks as unknown as Array<Record<string,unknown>>,format)}/>} 
@@ -95,7 +98,7 @@ export default function ProductionConsole(){
  </div>
 }
 
-function Empty({source}:{source:DataSource}){return <section className="empty-state"><Database/><h3>Data Source: {source}</h3><p>没有加载任何数据，也没有 Mock 回退。</p></section>}
+function Empty({source}:{source:DataSource}){return <section className="empty-state"><Database/><h3>Data Source: {dataSourceLabel(source)}</h3><p>没有加载任何数据，也没有 Mock 回退。</p></section>}
 function Badge({ok,label}:{ok:boolean;label:string}){return <span className={ok?'badge ok':'badge bad'}>{ok?<CheckCircle2/>:<AlertTriangle/>}{label}</span>}
 function ExportButtons({run}:{run:(format:'csv'|'xls'|'pdf')=>void}){return <div className="exports"><button onClick={()=>run('csv')}><Download/>CSV</button><button onClick={()=>run('xls')}><FileJson/>Excel</button><button onClick={()=>run('pdf')}><FileJson/>PDF</button></div>}
 
