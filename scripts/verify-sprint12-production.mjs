@@ -18,6 +18,10 @@ const required=[
  ['Trace endpoint',apiSource.includes('/operations/traces/')],
  ['Contamination endpoint',apiSource.includes('/operations/mock-contamination')],
  ['Production stylesheet',main.includes("'./production-console.css'")],
+ ['Admin user login',apiSource.includes('/admin/auth/login')],
+ ['Bearer authorization',apiSource.includes('Authorization:`Bearer ${token}`')],
+ ['Evidence Center endpoint',apiSource.includes('/evidence/summary')],
+ ['Daily Closing endpoint',apiSource.includes('/settlement/daily-closing')],
 ]
 const forbidden=[
  ['hard-coded fake email',/admin@fastlink\.test/i],
@@ -25,8 +29,9 @@ const forbidden=[
  ['browser secret persistence',/(localStorage|sessionStorage)/],
  ['deleted treasury simulation route',/treasury\/simulate/],
  ['demo data generator',/(generateSprint|demoData|mockApi|mockDashboard)/i],
+ ['legacy platform Admin Key',/(ADMIN_API_KEY|x-admin-api-key)/i],
 ]
 
 for(const[label,ok]of required)if(!ok)throw new Error(`Missing ${label}`)
 for(const[label,pattern]of forbidden)if(pattern.test(source))throw new Error(`Forbidden ${label}`)
-console.log(`Sprint-12 Production Console verification PASS (${required.length} requirements, ${forbidden.length} contamination checks)`)
+console.log(`Sprint-13 Phase-3 Admin verification PASS (${required.length} requirements, ${forbidden.length} contamination checks)`)
