@@ -43,10 +43,10 @@ flowchart LR
 
 ## Security
 
-- Admin API Key uses the existing `sessionStorage` mechanism only.
+- Superseded in Sprint-13 Phase-3: administrator authentication uses revocable user sessions held only in memory.
 - No Client ID, SSA, certificate, private key, CVV or PIN is stored in source or demo data.
 - Existing role-to-navigation boundaries remain in `App.tsx` and are not replaced by untrusted Mock data.
-- Backend RBAC writes require the existing `x-admin-api-key` header.
+- Superseded in Sprint-13 Phase-3: backend RBAC writes require an authenticated user Bearer session and database permission.
 
 ## Verification commands
 

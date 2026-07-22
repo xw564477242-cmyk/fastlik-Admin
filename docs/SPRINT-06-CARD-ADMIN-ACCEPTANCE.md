@@ -6,7 +6,7 @@
 - Admin: Treasury, Settlement, Risk, Card, Transaction and Webhook dashboards.
 - Every dashboard supports search, status/currency filtering and CSV export.
 - Deterministic browser-safe demo data: 1,000 users, 10,000 transactions, 100 cards and six asset currencies.
-- Existing `ADMIN_API_KEY` handling remains session-only. No API key or Thredd credential is stored in source or demo data.
+- Superseded in Sprint-13 Phase-3: the legacy platform credential was removed and replaced by revocable administrator sessions.
 
 ## Adapter behaviour
 
@@ -56,7 +56,7 @@ Sprint-06 demo verification passed: 1,000 users · 10,000 transactions · 100 ca
 
 ## Security notes
 
-- API keys are stored only in `sessionStorage`, using the existing key name.
+- Superseded in Sprint-13 Phase-3: browser-persisted administrator credentials are prohibited.
 - CVV is displayed for at most 30 seconds and is never persisted.
 - PIN input is masked, validated as four digits and cleared immediately after use.
 - CSV cells beginning with `=`, `+`, `-` or `@` are neutralized to prevent spreadsheet formula injection.
