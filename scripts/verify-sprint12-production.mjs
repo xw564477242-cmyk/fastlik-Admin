@@ -11,10 +11,12 @@ const main=read('src/main.tsx')
 
 const required=[
  ['Data Source label',consoleSource.includes('Data Source:')],
+ ['Mock source',consoleSource.includes("'MOCK'")],
+ ['Local source',consoleSource.includes("'LOCAL'")],
  ['Sandbox source',consoleSource.includes("'SANDBOX'")],
  ['UAT source',consoleSource.includes("'UAT'")],
  ['Production source',consoleSource.includes("'PRODUCTION'")],
- ['No fallback statement',consoleSource.includes('NO MOCK FALLBACK')],
+ ['No fallback statement',consoleSource.includes('NO DATA-SOURCE FALLBACK')],
  ['Trace endpoint',apiSource.includes('/operations/traces/')],
  ['Contamination endpoint',apiSource.includes('/operations/mock-contamination')],
  ['Production stylesheet',main.includes("'./production-console.css'")],
@@ -22,6 +24,10 @@ const required=[
  ['Bearer authorization',apiSource.includes('Authorization:`Bearer ${token}`')],
  ['Evidence Center endpoint',apiSource.includes('/evidence/summary')],
  ['Daily Closing endpoint',apiSource.includes('/settlement/daily-closing')],
+ ['Card Explorer endpoint',apiSource.includes('/cards?')],
+ ['Transaction Explorer endpoint',apiSource.includes('/transactions?')],
+ ['Certificate metadata view',consoleSource.includes('certificateMetadata')],
+ ['Known Gap register',consoleSource.includes('KG-001')],
 ]
 const forbidden=[
  ['hard-coded fake email',/admin@fastlink\.test/i],
