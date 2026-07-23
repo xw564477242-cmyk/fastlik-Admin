@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="FastLink Global Payment Network" />
+  <title>FastLink Payment</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main>
+    <nav>
+      <div class="brand"><span>F</span><b>FastLink</b></div>
+      <div class="nav-links">
+        <a href="https://xw564477242-cmyk.github.io/fastlik-app/">Wallet</a>
+        <a href="https://xw564477242-cmyk.github.io/fastlik-Admin/">Admin</a>
+      </div>
+    </nav>
+
+    <section class="hero">
+      <div class="copy">
+        <p class="eyebrow">GLOBAL PAYMENT INFRASTRUCTURE</p>
+        <h1>FastLink<br/>Global Payment Network</h1>
+        <p class="subtitle">连接钱包、全球发卡、资金管理与清算服务。所有生产数据均来自受控 Backend，不使用 Mock 回退。</p>
+        <div class="actions">
+          <a class="primary" href="https://xw564477242-cmyk.github.io/fastlik-app/">打开 Wallet</a>
+          <a class="secondary" href="https://xw564477242-cmyk.github.io/fastlik-Admin/">打开 Admin</a>
+        </div>
+      </div>
+      <div class="network" aria-hidden="true"><div class="globe">F</div></div>
+    </section>
+
+    <section class="features">
+      <article><span>01</span><h2>Global Card</h2><p>虚拟卡、实体卡与生命周期管理。</p></article>
+      <article><span>02</span><h2>Wallet</h2><p>真实 Backend Session、余额、交易与卡片控制。</p></article>
+      <article><span>03</span><h2>Treasury</h2><p>资金池、储备金、待清算与流动性管理。</p></article>
+      <article><span>04</span><h2>Compliance</h2><p>KYC、审计、Trace ID 与环境隔离。</p></article>
+    </section>
+
+    <footer>
+      <span>FastLink Payment</span>
+      <span id="runtime">Runtime configuration loading…</span>
+    </footer>
+  </main>
+  <script src="./runtime-config.js"></script>
+  <script>
+    const runtime = window.__FASTLINK_RUNTIME__ || {};
+    document.getElementById('runtime').textContent = `${runtime.environment || 'UNKNOWN'} · Build ${(runtime.buildSha || 'unknown').slice(0, 12)}`;
+  </script>
+</body>
+</html>
