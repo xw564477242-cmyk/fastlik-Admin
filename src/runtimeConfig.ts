@@ -15,8 +15,15 @@ const apiUrl = required('VITE_FASTLINK_API_URL').replace(/\/$/, '')
 if (!/^https?:\/\//.test(apiUrl)) throw new Error('VITE_FASTLINK_API_URL must be an absolute HTTP(S) URL')
 if (environment === 'PRODUCTION' && !apiUrl.startsWith('https://')) throw new Error('Production API URL must use HTTPS')
 
+const runtimeBuildSha = window.__FASTLINK_RUNTIME__?.buildSha?.trim()
+const verifiedRuntimeBuildSha = runtimeBuildSha && /^[0-9a-f]{40}$/i.test(runtimeBuildSha)
+  ? runtimeBuildSha
+  : undefined
+
 export const runtimeConfig = Object.freeze({
   environment,
   apiUrl,
-  buildSha: (import.meta.env.VITE_FASTLINK_BUILD_SHA as string | undefined)?.trim() || 'unknown',
+  buildSha: verifiedRuntimeBuildSha
+    || (import.meta.env.VITE_FASTLINK_BUILD_SHA as string | undefined)?.trim()
+    || 'unknown',
 })
