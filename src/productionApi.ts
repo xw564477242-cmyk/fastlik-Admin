@@ -37,7 +37,7 @@ export class ApiError extends Error {
 
 const newTrace=()=>crypto.randomUUID()
 
-async function request<T>(path:string,token?:string,method='GET',body?:unknown):Promise<T>{
+export async function apiRequest<T>(path:string,token?:string,method='GET',body?:unknown):Promise<T>{
  const controller=new AbortController();const timeout=window.setTimeout(()=>controller.abort(),20_000);const trace=newTrace()
  try{
   const response=await fetch(`${DEFAULT_API}${path}`,{
@@ -61,7 +61,7 @@ async function request<T>(path:string,token?:string,method='GET',body?:unknown):
 }
 
 async function health(path:string):Promise<Health>{
- const raw=await request<RawHealth>(path)
+ const raw=await apiRequest<RawHealth>(path)
  const thredd=raw.threddConfigurationStatus
  return {
   status:raw.status,
@@ -84,19 +84,34 @@ const query=(environment:DataSource)=>`environment=${encodeURIComponent(environm
 export const productionApi={
  health:(_base:string)=>health('/health'),
  systemReadiness:(_base:string)=>health('/health/readiness'),
- login:(_base:string,tenantId:string,email:string,password:string)=>request<AdminSession>('/admin/auth/login',undefined,'POST',{tenantId,email,password}),
- logout:(_base:string,token:string)=>request<{revoked:true}>('/admin/auth/logout',token,'POST'),
- tenant:(_base:string,token:string,tenantId:string)=>request<Tenant>(`/admin/tenants/${tenantId}`,token),
- readiness:(_base:string,token:string,tenantId:string)=>request<IntegrationReadiness>(`/admin/tenants/${tenantId}/integrations/readiness`,token),
- treasury:(_base:string,key:string,tenantId:string,environment:DataSource)=>request<{generatedAt:string;positions:TreasuryPosition[]}>(`/admin/tenants/${tenantId}/dashboards/treasury?${query(environment)}`,key),
- reconciliation:(_base:string,key:string,tenantId:string,environment:DataSource)=>request<Reconciliation>(`/admin/tenants/${tenantId}/settlement/reconciliation?${query(environment)}`,key),
- trialBalance:(_base:string,key:string,tenantId:string,environment:DataSource)=>request<TrialBalance[]>(`/admin/tenants/${tenantId}/ledger/trial-balance?${query(environment)}`,key),
- accounts:(_base:string,key:string,tenantId:string,environment:DataSource)=>request<WalletAccount[]>(`/admin/tenants/${tenantId}/ledger/accounts?${query(environment)}`,key),
- journals:(_base:string,key:string,tenantId:string,environment:DataSource)=>request<Journal[]>(`/admin/tenants/${tenantId}/ledger/journals?${query(environment)}`,key),
- contamination:(_base:string,key:string,tenantId:string,environment:DataSource)=>request<Contamination>(`/admin/tenants/${tenantId}/operations/mock-contamination?${query(environment)}`,key),
- merchants:(_base:string,key:string,tenantId:string,environment:DataSource)=>request<Page<Merchant>>(`/admin/tenants/${tenantId}/merchants?${query(environment)}&limit=100`,key),
- merchantPayments:(_base:string,key:string,tenantId:string,environment:DataSource)=>request<Page<MerchantPayment>>(`/admin/tenants/${tenantId}/merchant/payments?${query(environment)}&limit=100`,key),
- trace:(_base:string,key:string,tenantId:string,environment:DataSource,id:string)=>request<TraceReport>(`/admin/tenants/${tenantId}/operations/traces/${encodeURIComponent(id)}?${query(environment)}`,key),
- evidenceSummary:(_base:string,token:string,tenantId:string,environment:DataSource)=>request<EvidenceSummary>(`/admin/tenants/${tenantId}/evidence/summary?${query(environment)}`,token),
- dailyClosing:(_base:string,token:string,tenantId:string,environment:DataSource)=>request<FinancialOperationalReport>(`/admin/tenants/${tenantId}/settlement/daily-closing?${query(environment)}`,token),
+ login:(_base:string,tenantId:string,email:string,password:string)=>apiRequest<AdminSession>('/admin/auth/login',undefined,'POST',{tenantId,email,password}),
+ logout:(_base:string,token:string)=>apiRequest<{revoked:true}>('/admin/auth/logout',token,'POST'),
+ me:(_base:string,token:string)=>apiRequest<Record<string,unknown>>('/admin/auth/me',token),
+ tenants:(_base:string,token:string)=>apiRequest<Tenant[]>('/admin/tenants',token),
+ tenant:(_base:string,token:string,tenantId:string)=>apiRequest<Tenant>(`/admin/tenants/${tenantId}`,token),
+ readiness:(_base:string,token:string,tenantId:string)=>apiRequest<IntegrationReadiness>(`/admin/tenants/${tenantId}/integrations/readiness`,token),
+ treasury:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<{generatedAt:string;positions:TreasuryPosition[]}>(`/admin/tenants/${tenantId}/dashboards/treasury?${query(environment)}`,key),
+ settlementDashboard:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Record<string,unknown>>(`/admin/tenants/${tenantId}/dashboards/settlement?${query(environment)}`,key),
+ riskDashboard:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Record<string,unknown>>(`/admin/tenants/${tenantId}/dashboards/risk?${query(environment)}`,key),
+ reconciliation:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Reconciliation>(`/admin/tenants/${tenantId}/settlement/reconciliation?${query(environment)}`,key),
+ trialBalance:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<TrialBalance[]>(`/admin/tenants/${tenantId}/ledger/trial-balance?${query(environment)}`,key),
+ accounts:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<WalletAccount[]>(`/admin/tenants/${tenantId}/ledger/accounts?${query(environment)}`,key),
+ journals:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Journal[]>(`/admin/tenants/${tenantId}/ledger/journals?${query(environment)}`,key),
+ walletOperations:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/wallet/operations?${query(environment)}&limit=100`,key),
+ walletTransactions:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/wallet/transactions?${query(environment)}&limit=100`,key),
+ contamination:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Contamination>(`/admin/tenants/${tenantId}/operations/mock-contamination?${query(environment)}`,key),
+ merchants:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Page<Merchant>>(`/admin/tenants/${tenantId}/merchants?${query(environment)}&limit=100`,key),
+ merchantPayments:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Page<MerchantPayment>>(`/admin/tenants/${tenantId}/merchant/payments?${query(environment)}&limit=100`,key),
+ apiClients:(_base:string,key:string,tenantId:string)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/api-clients`,key),
+ events:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/events?${query(environment)}`,key),
+ user:(_base:string,key:string,tenantId:string,environment:DataSource,userId:string)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/users/${encodeURIComponent(userId)}?${query(environment)}`,key),
+ card:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<Record<string,unknown>>(`/admin/tenants/${tenantId}/cards/${encodeURIComponent(cardId)}`,key),
+ cardBalance:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<Record<string,unknown>>(`/admin/tenants/${tenantId}/cards/${encodeURIComponent(cardId)}/balance`,key),
+ cardTimeline:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/cards/${encodeURIComponent(cardId)}/timeline`,key),
+ freezeCard:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<Record<string,unknown>>(`/admin/tenants/${tenantId}/cards/${encodeURIComponent(cardId)}/freeze`,key,'POST',{idempotencyKey:crypto.randomUUID()}),
+ unfreezeCard:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<Record<string,unknown>>(`/admin/tenants/${tenantId}/cards/${encodeURIComponent(cardId)}/unfreeze`,key,'POST',{idempotencyKey:crypto.randomUUID()}),
+ trace:(_base:string,key:string,tenantId:string,environment:DataSource,id:string)=>apiRequest<TraceReport>(`/admin/tenants/${tenantId}/operations/traces/${encodeURIComponent(id)}?${query(environment)}`,key),
+ evidence:(_base:string,token:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/evidence?${query(environment)}&limit=100`,token),
+ evidenceSummary:(_base:string,token:string,tenantId:string,environment:DataSource)=>apiRequest<EvidenceSummary>(`/admin/tenants/${tenantId}/evidence/summary?${query(environment)}`,token),
+ dailyClosing:(_base:string,token:string,tenantId:string,environment:DataSource)=>apiRequest<FinancialOperationalReport>(`/admin/tenants/${tenantId}/settlement/daily-closing?${query(environment)}`,token),
 }
