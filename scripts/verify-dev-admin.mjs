@@ -25,7 +25,7 @@ assert(entrypoint.includes('VITE_FASTLINK_API_URL is required'), 'container star
 assert(entrypoint.includes('RAILWAY_GIT_COMMIT_SHA is required'), 'container startup must fail closed without Release SHA')
 assert(entrypoint.includes('https://'), 'container startup must require an explicit HTTPS API URL')
 assert(entrypoint.includes('SANDBOX Admin must use the approved Backend Dev API'), 'SANDBOX container must reject a non-Dev Backend')
-assert(runtime.includes('SANDBOX Admin must use the approved Backend Dev API'), 'browser runtime must reject a non-Dev Backend')
+assert(runtime.includes('Cloudflare Admin must use same-origin /api'), 'browser runtime must require the Cloudflare same-origin API')
 assert(!entrypoint.includes('PRODUCTION_BACKEND') && !entrypoint.includes('mock'), 'Dev runtime must not contain a Production or Mock fallback')
 assert(dockerfile.includes('/docker-entrypoint.d/40-fastlink-runtime.sh'), 'runtime generation must execute before nginx starts')
 

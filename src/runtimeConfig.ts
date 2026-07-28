@@ -14,13 +14,11 @@ if (!['LOCAL', 'SANDBOX', 'TEST', 'UAT', 'PRODUCTION'].includes(environment)) {
 
 const buildApiUrl = required('VITE_FASTLINK_API_URL')
 const apiUrl = (window.__FASTLINK_RUNTIME__?.apiUrl?.trim() || buildApiUrl).replace(/\/$/, '')
-if (!/^https?:\/\//.test(apiUrl)) throw new Error('VITE_FASTLINK_API_URL must be an absolute HTTP(S) URL')
-if (environment === 'PRODUCTION' && !apiUrl.startsWith('https://')) throw new Error('Production API URL must use HTTPS')
-if (environment === 'SANDBOX' && apiUrl !== 'https://fastlink-backend-dev-development-a.up.railway.app/api') {
-  throw new Error('SANDBOX Admin must use the approved Backend Dev API')
+if (apiUrl !== '/api' && !/^https:\/\//.test(apiUrl)) {
+  throw new Error('VITE_FASTLINK_API_URL must be same-origin /api or an absolute HTTPS URL')
 }
-if (environment === 'TEST' && (!apiUrl.startsWith('https://') || apiUrl.includes('production-309d'))) {
-  throw new Error('TEST Admin must use an isolated HTTPS Backend Test API')
+if (['SANDBOX', 'TEST', 'PRODUCTION'].includes(environment) && apiUrl !== '/api') {
+  throw new Error(`${environment} Cloudflare Admin must use same-origin /api`)
 }
 
 const runtimeBuildSha = window.__FASTLINK_RUNTIME__?.buildSha?.trim()
