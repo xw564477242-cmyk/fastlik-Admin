@@ -1,9 +1,15 @@
-name: Deploy FastLink Admin to GitHub Pages
+name: Legacy Rollback - Deploy FastLink Admin to GitHub Pages
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type DEPLOY_LEGACY_ROLLBACK to publish the legacy Pages fallback
+        required: true
+        type: choice
+        options:
+          - DO_NOT_DEPLOY
+          - DEPLOY_LEGACY_ROLLBACK
 
 permissions:
   contents: read
@@ -16,6 +22,7 @@ concurrency:
 
 jobs:
   build:
+    if: inputs.confirmation == 'DEPLOY_LEGACY_ROLLBACK'
     runs-on: ubuntu-latest
     env:
       VITE_FASTLINK_API_URL: https://exquisite-surprise-production-309d.up.railway.app/api
