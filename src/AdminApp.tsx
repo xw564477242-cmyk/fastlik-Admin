@@ -294,8 +294,8 @@ function AuthenticatedAdmin({ session, onLogout }: { session: AdminSession; onLo
           settledSection('Merchant Payments', 'Real payment, clearing and settlement history', productionApi.merchantPayments(DEFAULT_API, token, tenantId, source)),
         ])
       } else if (active === 'sandbox') {
-        if (source !== 'SANDBOX') {
-          next = [{ title: 'BLOCKED · Environment Mismatch', description: 'Developer Sandbox 不会回退到其他数据源。', value: { currentEnvironment: source, requiredEnvironment: 'SANDBOX' } }]
+        if (!['SANDBOX', 'TEST'].includes(source)) {
+          next = [{ title: 'BLOCKED · Environment Mismatch', description: '非生产模拟环境不会回退到其他数据源。', value: { currentEnvironment: source, requiredEnvironment: 'SANDBOX_OR_TEST' } }]
         } else {
           next = await Promise.all([
             settledSection('Mock Contamination Audit', 'Sandbox source integrity', productionApi.contamination(DEFAULT_API, token, tenantId, source)),

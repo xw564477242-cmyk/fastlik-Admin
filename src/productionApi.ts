@@ -1,15 +1,15 @@
 import { runtimeConfig } from './runtimeConfig'
 
 export const DEFAULT_API = runtimeConfig.apiUrl
-export type DataSource = 'SANDBOX' | 'UAT' | 'PRODUCTION'
+export type DataSource = 'SANDBOX' | 'TEST' | 'UAT' | 'PRODUCTION'
 export type ThreddConfiguration = {status:'READY'|'BLOCKED';reason?:string;mode:string;missingVariables?:string[]}
 export type Health = {
  status:string;service:string;environment?:string;release:string
  checks:{process?:string;database?:string;schema?:string;threddConfiguration?:string}
  responseTimeMs?:number;timestamp:string;threddConfigurationStatus?:ThreddConfiguration
 }
-export type AdminSession = {accessToken:string;tokenType:'Bearer';expiresInSeconds:number;expiresAt:string;user:{id:string;email:string;tenantId:string;environment:'SANDBOX'|'UAT'|'PRODUCTION';roles:string[];permissions:string[]}}
-export type Tenant = {id:string;legalName:string;brandName:string;slug:string;status:string;environment:'SANDBOX'|'UAT'|'PRODUCTION'}
+export type AdminSession = {accessToken:string;tokenType:'Bearer';expiresInSeconds:number;expiresAt:string;user:{id:string;email:string;tenantId:string;environment:'SANDBOX'|'TEST'|'UAT'|'PRODUCTION';roles:string[];permissions:string[]}}
+export type Tenant = {id:string;legalName:string;brandName:string;slug:string;status:string;environment:'SANDBOX'|'TEST'|'UAT'|'PRODUCTION'}
 export type TrialBalance = {assetCode:string;debit:string;credit:string;balanced:boolean}
 export type TreasuryPosition = {assetCode:string;sponsorReserve:string;requiredReserve:string;availableBalance:string;authorizationHold:string;pendingSettlement:string;totalControlled?:string;liquidityRatio:string|null;updatedAt?:string}
 export type Reconciliation = {generatedAt:string;dataSource:string;evidencePresent:boolean;status:'MATCHED'|'DISCREPANCY'|'NO_DATA';pendingChecks:Array<{assetCode:string;expectedPendingSettlement:string;treasuryPendingSettlement:string;difference:string;matched:boolean}>;authorizationHoldChecks:Array<{assetCode:string;expectedAuthorizationHold:string;treasuryAuthorizationHold:string;difference:string;matched:boolean}>;clearingDifferenceChecks:Array<{assetCode:string;clearingDifference:string;expectedAuthorizationHold:string;matched:boolean}>;journalChecks:Array<{assetCode:string;debit:string;credit:string;matched:boolean}>;trialBalance:TrialBalance[];externalReconciliation:{bank:{status:'BLOCKED';blocker:string};processor:{status:'BLOCKED';blocker:string}}}
