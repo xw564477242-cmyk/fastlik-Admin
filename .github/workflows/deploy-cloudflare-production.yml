@@ -1,0 +1,65 @@
+name: Deploy Admin Production to Cloudflare
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fastlink-admin-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: vars.FASTLINK_PRODUCTION_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: cloudflare-admin-production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm audit --audit-level=high
+      - run: npm test
+
+      - name: Assert immutable Production targets
+        env:
+          BACKEND_ORIGIN: ${{ vars.FASTLINK_PRODUCTION_BACKEND_ORIGIN }}
+          ADMIN_URL: ${{ vars.FASTLINK_PRODUCTION_ADMIN_URL }}
+        run: |
+          test "$BACKEND_ORIGIN" = 'https://exquisite-surprise-production-309d.up.railway.app'
+          test "$ADMIN_URL" = 'https://fastlink-admin.adhesive-snowshoe.workers.dev'
+
+      - name: Build Production package
+        env:
+          FASTLINK_BUILD_SHA: ${{ github.sha }}
+        run: npm run build:cloudflare:production
+
+      - name: Deploy Production Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_PRODUCTION_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_PRODUCTION_ACCOUNT_ID }}
+          wranglerVersion: "4.114.0"
+          command: >-
+            deploy --config wrangler.production.jsonc
+            --var FASTLINK_BACKEND_ORIGIN:${{ vars.FASTLINK_PRODUCTION_BACKEND_ORIGIN }}
+            --var FASTLINK_BUILD_SHA:${{ github.sha }}
+
+      - name: Verify Production Worker
+        env:
+          ADMIN_URL: ${{ vars.FASTLINK_PRODUCTION_ADMIN_URL }}
+        run: |
+          health="$(curl --fail --silent --show-error --retry 6 --retry-delay 5 "$ADMIN_URL/healthz")"
+          grep -F '"environment":"PRODUCTION"' <<<"$health"
+          grep -F "\"buildSha\":\"${{ github.sha }}\"" <<<"$health"
+          curl --fail --silent --show-error --dump-header headers.txt --output health.json "$ADMIN_URL/api/health"
+          grep -i -F 'x-fastlink-api-proxy: admin-production' headers.txt
+          grep -F '"environment":"PRODUCTION"' health.json
