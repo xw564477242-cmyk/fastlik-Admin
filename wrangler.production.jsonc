@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fastlink-admin",
+  "main": "worker.js",
+  "compatibility_date": "2026-07-28",
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/healthz", "/runtime-config.js"]
+  },
+  "vars": {
+    "FASTLINK_ENVIRONMENT": "PRODUCTION",
+    "FASTLINK_API_URL": "/api",
+    "FASTLINK_SERVICE_NAME": "fastlink-admin",
+    "FASTLINK_PROXY_ID": "admin-production"
+  },
+  "observability": { "enabled": true }
+}
