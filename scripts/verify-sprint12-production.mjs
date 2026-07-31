@@ -20,6 +20,7 @@ const required = [
   ['Bearer authorization', api.includes('Authorization:`Bearer ${token}`')],
   ['tenant API', api.includes("'/admin/tenants'")],
   ['wallet API', routes.includes('/wallet/operations')],
+  ['wallet operation detail API', api.includes('productionApi.walletOperation') || api.includes('walletOperation:')],
   ['ledger API', api.includes('/ledger/journals')],
   ['treasury API', api.includes('/dashboards/treasury')],
   ['settlement API', api.includes('/settlement/reconciliation')],

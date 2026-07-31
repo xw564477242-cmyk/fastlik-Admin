@@ -13,6 +13,8 @@ export const adminRoutes = {
     `${adminRoutes.tenant(tenantId)}/wallet/operations?${environmentQuery(environment)}&limit=100`,
   walletTransactions: (tenantId: string, environment: DataSource) =>
     `${adminRoutes.tenant(tenantId)}/wallet/transactions?${environmentQuery(environment)}&limit=100`,
+  walletOperation: (tenantId: string, operationId: string, environment: DataSource) =>
+    `${adminRoutes.tenant(tenantId)}/wallet/operations/${segment(operationId)}?${environmentQuery(environment)}`,
   card: (tenantId: string, cardId: string) =>
     `${adminRoutes.tenant(tenantId)}/cards/${segment(cardId)}`,
   cardBalance: (tenantId: string, cardId: string) =>
