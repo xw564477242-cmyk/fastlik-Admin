@@ -8,7 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "build:cloudflare:production": "bash scripts/build-cloudflare-production.sh",
     "preview": "vite preview",
-    "test": "node scripts/verify-sprint12-production.mjs"
+    "test": "node scripts/verify-sprint12-production.mjs && node --experimental-strip-types --test tests/*.test.mjs"
   },
   "dependencies": {
     "lucide-react": "0.468.0",
