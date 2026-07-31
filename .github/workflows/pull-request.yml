@@ -79,3 +79,24 @@ jobs:
         run: |
           set -euo pipefail
           ! git grep -n -E -- '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{30,}|sk_live_[A-Za-z0-9]{16,}|postgres(ql)?://[^[:space:]/:]+:[^[:space:]@]+@'
+
+      - name: Record immutable non-production evidence
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          printf '{"format":"fastlink-admin-pr-evidence-v1","sourceCommit":"%s","environment":"NON_PRODUCTION"}\n' "$SOURCE_SHA" > build-evidence.json
+          sha256sum dist/index.html dist/runtime-config.js package-lock.json build-evidence.json > build-provenance.sha256
+          sha256sum --check build-provenance.sha256
+
+      - name: Upload non-production build evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: fastlink-admin-pr-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            dist/
+            build-evidence.json
+            build-provenance.sha256
+          if-no-files-found: error
+          retention-days: 7
