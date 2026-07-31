@@ -13,6 +13,10 @@ test('wallet routes keep tenant and environment boundaries immutable', () => {
     adminRoutes.walletTransactions(tenantId, 'UAT'),
     '/admin/tenants/tenant%2Facme%3Fenvironment%3DPRODUCTION/wallet/transactions?environment=UAT&limit=100',
   )
+  assert.equal(
+    adminRoutes.walletOperation(tenantId, 'op/123?environment=PRODUCTION', 'TEST'),
+    '/admin/tenants/tenant%2Facme%3Fenvironment%3DPRODUCTION/wallet/operations/op%2F123%3Fenvironment%3DPRODUCTION?environment=TEST',
+  )
 })
 
 test('card lifecycle routes encode identifiers and cannot change endpoint shape', () => {
