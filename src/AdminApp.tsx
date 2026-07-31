@@ -44,6 +44,7 @@ import {
   idleWalletOperationDetail,
   loadedWalletOperationDetail,
   loadingWalletOperationDetail,
+  missingWalletOperationDetail,
   type WalletOperationDetailState,
 } from './walletOperationDetail'
 import {
@@ -479,7 +480,11 @@ function OperationsWorkspace({ session, tenantId }: { session: AdminSession; ten
     if (tab === 'operation') {
       const operationId = lookup.trim()
       if (!operationId) {
-        setOperationDetail({ status: 'ERROR', message: '请输入真实 Wallet Operation ID' })
+        const missing = missingWalletOperationDetail()
+        setBusy(missing.busy)
+        setSections([...missing.sections])
+        setError(missing.pageError)
+        setOperationDetail(missing.detail)
         return
       }
       setBusy(true)
