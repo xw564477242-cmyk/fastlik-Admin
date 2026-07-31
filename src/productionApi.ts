@@ -100,6 +100,7 @@ export const productionApi={
  journals:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Journal[]>(`/admin/tenants/${tenantId}/ledger/journals?${query(environment)}`,key),
  walletOperations:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(adminRoutes.walletOperations(tenantId,environment),key),
  walletTransactions:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(adminRoutes.walletTransactions(tenantId,environment),key),
+ walletOperation:(_base:string,key:string,tenantId:string,operationId:string,environment:DataSource)=>apiRequest<unknown>(adminRoutes.walletOperation(tenantId,operationId,environment),key),
  contamination:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Contamination>(`/admin/tenants/${tenantId}/operations/mock-contamination?${query(environment)}`,key),
  merchants:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Page<Merchant>>(`/admin/tenants/${tenantId}/merchants?${query(environment)}&limit=100`,key),
  merchantPayments:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Page<MerchantPayment>>(`/admin/tenants/${tenantId}/merchant/payments?${query(environment)}&limit=100`,key),
