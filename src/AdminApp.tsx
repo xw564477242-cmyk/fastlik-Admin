@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
   AlertTriangle,
@@ -39,6 +39,13 @@ import {
   type DataSource,
   type Tenant,
 } from './productionApi'
+import {
+  failedWalletOperationDetail,
+  idleWalletOperationDetail,
+  loadedWalletOperationDetail,
+  loadingWalletOperationDetail,
+  type WalletOperationDetailState,
+} from './walletOperationDetail'
 
 type NavId =
   | 'overview'
@@ -450,13 +457,42 @@ function CardWorkspace({ session, tenantId, mode }: { session: AdminSession; ten
 }
 
 function OperationsWorkspace({ session, tenantId }: { session: AdminSession; tenantId: string }) {
-  const [tab, setTab] = useState<'wallet' | 'user' | 'trace'>('wallet')
+  const [tab, setTab] = useState<'wallet' | 'operation' | 'user' | 'trace'>('wallet')
   const [lookup, setLookup] = useState('')
   const [sections, setSections] = useState<DataSection[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [operationDetail, setOperationDetail] = useState<WalletOperationDetailState>(idleWalletOperationDetail)
+  const operationRequest = useRef(0)
   const source = session.user.environment as DataSource
   const run = async () => {
+    if (tab === 'operation') {
+      const operationId = lookup.trim()
+      if (!operationId) {
+        setOperationDetail({ status: 'ERROR', message: '请输入真实 Wallet Operation ID' })
+        return
+      }
+      const requestId = ++operationRequest.current
+      setBusy(true)
+      setError('')
+      setSections([])
+      setOperationDetail(loadingWalletOperationDetail())
+      try {
+        const value = await productionApi.walletOperation(
+          DEFAULT_API,
+          session.accessToken,
+          tenantId,
+          operationId,
+          source,
+        )
+        if (requestId === operationRequest.current) setOperationDetail(loadedWalletOperationDetail(value))
+      } catch (error) {
+        if (requestId === operationRequest.current) setOperationDetail(failedWalletOperationDetail(error))
+      } finally {
+        if (requestId === operationRequest.current) setBusy(false)
+      }
+      return
+    }
     setBusy(true)
     setError('')
     setSections([])
@@ -479,6 +515,26 @@ function OperationsWorkspace({ session, tenantId }: { session: AdminSession; ten
       setBusy(false)
     }
   }
-  useEffect(() => { void run() }, [tenantId]) // eslint-disable-line react-hooks/exhaustive-deps
-  return <><PageHeading title="终端用户运营" tenant={tenantId} source={source} busy={busy} refresh={() => void run()} /><div className="workspace-tabs"><button className={tab === 'wallet' ? 'active' : ''} onClick={() => { setTab('wallet'); setLookup('') }}>Wallet Operations</button><button className={tab === 'user' ? 'active' : ''} onClick={() => { setTab('user'); setLookup('') }}>User / KYC</button><button className={tab === 'trace' ? 'active' : ''} onClick={() => { setTab('trace'); setLookup('') }}>Trace ID</button></div>{tab !== 'wallet' && <section className="lookup-panel compact"><input value={lookup} onChange={(event) => setLookup(event.target.value)} placeholder={tab === 'user' ? '真实 User ID' : '8–128 位 Trace ID'} /><button disabled={busy} onClick={() => void run()}><ChevronRight />查询</button></section>}{error && <div className="inline-error page-error"><AlertTriangle />{error}</div>}{busy && !sections.length ? <Loading /> : sections.map((section) => <DataCard key={section.title} section={section} query="" />)}</>
+  useEffect(() => {
+    operationRequest.current += 1
+    setLookup('')
+    setOperationDetail(idleWalletOperationDetail())
+    if (tab === 'wallet') void run()
+    else {
+      setSections([])
+      setError('')
+      setBusy(false)
+    }
+  }, [tenantId, tab]) // eslint-disable-line react-hooks/exhaustive-deps
+  const switchTab = (next: 'wallet' | 'operation' | 'user' | 'trace') => {
+    operationRequest.current += 1
+    setTab(next)
+    setLookup('')
+    setSections([])
+    setError('')
+    setBusy(false)
+    setOperationDetail(idleWalletOperationDetail())
+  }
+  const placeholder = tab === 'operation' ? '真实 Wallet Operation ID' : tab === 'user' ? '真实 User ID' : '8–128 位 Trace ID'
+  return <><PageHeading title="终端用户运营" tenant={tenantId} source={source} busy={busy} refresh={() => void run()} /><div className="workspace-tabs"><button className={tab === 'wallet' ? 'active' : ''} onClick={() => switchTab('wallet')}>Wallet Operations</button><button className={tab === 'operation' ? 'active' : ''} onClick={() => switchTab('operation')}>Operation Detail</button><button className={tab === 'user' ? 'active' : ''} onClick={() => switchTab('user')}>User / KYC</button><button className={tab === 'trace' ? 'active' : ''} onClick={() => switchTab('trace')}>Trace ID</button></div>{tab !== 'wallet' && <section className="lookup-panel compact"><input value={lookup} onChange={(event) => setLookup(event.target.value)} placeholder={placeholder} /><button disabled={busy} onClick={() => void run()}><ChevronRight />查询</button></section>}{error && <div className="inline-error page-error"><AlertTriangle />{error}</div>}{operationDetail.status === 'LOADING' && <Loading />}{operationDetail.status === 'NOT_FOUND' && <section className="empty-state"><Search /><h3>WALLET OPERATION NOT FOUND</h3><p>{operationDetail.message}</p></section>}{operationDetail.status === 'ERROR' && <div className="inline-error page-error"><AlertTriangle />{operationDetail.message}</div>}{operationDetail.status === 'SUCCESS' && <DataCard section={{ title: 'Wallet Operation Detail', description: `${source} · Tenant-scoped read-only Backend response`, value: operationDetail.value }} query="" />}{tab !== 'operation' && (busy && !sections.length ? <Loading /> : sections.map((section) => <DataCard key={section.title} section={section} query="" />))}</>
 }
