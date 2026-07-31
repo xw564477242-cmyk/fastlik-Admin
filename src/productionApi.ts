@@ -1,7 +1,8 @@
 import { runtimeConfig } from './runtimeConfig'
+import { adminRoutes, type DataSource } from './adminRoutes'
 
 export const DEFAULT_API = runtimeConfig.apiUrl
-export type DataSource = 'SANDBOX' | 'TEST' | 'UAT' | 'PRODUCTION'
+export type { DataSource } from './adminRoutes'
 export type ThreddConfiguration = {status:'READY'|'BLOCKED';reason?:string;mode:string;missingVariables?:string[]}
 export type Health = {
  status:string;service:string;environment?:string;release:string
@@ -88,8 +89,8 @@ export const productionApi={
  logout:(_base:string,token:string)=>apiRequest<{revoked:true}>('/admin/auth/logout',token,'POST'),
  me:(_base:string,token:string)=>apiRequest<Record<string,unknown>>('/admin/auth/me',token),
  tenants:(_base:string,token:string)=>apiRequest<Tenant[]>('/admin/tenants',token),
- tenant:(_base:string,token:string,tenantId:string)=>apiRequest<Tenant>(`/admin/tenants/${tenantId}`,token),
- readiness:(_base:string,token:string,tenantId:string)=>apiRequest<IntegrationReadiness>(`/admin/tenants/${tenantId}/integrations/readiness`,token),
+ tenant:(_base:string,token:string,tenantId:string)=>apiRequest<Tenant>(adminRoutes.tenant(tenantId),token),
+ readiness:(_base:string,token:string,tenantId:string)=>apiRequest<IntegrationReadiness>(adminRoutes.readiness(tenantId),token),
  treasury:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<{generatedAt:string;positions:TreasuryPosition[]}>(`/admin/tenants/${tenantId}/dashboards/treasury?${query(environment)}`,key),
  settlementDashboard:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Record<string,unknown>>(`/admin/tenants/${tenantId}/dashboards/settlement?${query(environment)}`,key),
  riskDashboard:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Record<string,unknown>>(`/admin/tenants/${tenantId}/dashboards/risk?${query(environment)}`,key),
@@ -97,19 +98,19 @@ export const productionApi={
  trialBalance:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<TrialBalance[]>(`/admin/tenants/${tenantId}/ledger/trial-balance?${query(environment)}`,key),
  accounts:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<WalletAccount[]>(`/admin/tenants/${tenantId}/ledger/accounts?${query(environment)}`,key),
  journals:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Journal[]>(`/admin/tenants/${tenantId}/ledger/journals?${query(environment)}`,key),
- walletOperations:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/wallet/operations?${query(environment)}&limit=100`,key),
- walletTransactions:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/wallet/transactions?${query(environment)}&limit=100`,key),
+ walletOperations:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(adminRoutes.walletOperations(tenantId,environment),key),
+ walletTransactions:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(adminRoutes.walletTransactions(tenantId,environment),key),
  contamination:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Contamination>(`/admin/tenants/${tenantId}/operations/mock-contamination?${query(environment)}`,key),
  merchants:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Page<Merchant>>(`/admin/tenants/${tenantId}/merchants?${query(environment)}&limit=100`,key),
  merchantPayments:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Page<MerchantPayment>>(`/admin/tenants/${tenantId}/merchant/payments?${query(environment)}&limit=100`,key),
  apiClients:(_base:string,key:string,tenantId:string)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/api-clients`,key),
  events:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/events?${query(environment)}`,key),
  user:(_base:string,key:string,tenantId:string,environment:DataSource,userId:string)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/users/${encodeURIComponent(userId)}?${query(environment)}`,key),
- card:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<Record<string,unknown>>(`/admin/tenants/${tenantId}/cards/${encodeURIComponent(cardId)}`,key),
- cardBalance:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<Record<string,unknown>>(`/admin/tenants/${tenantId}/cards/${encodeURIComponent(cardId)}/balance`,key),
- cardTimeline:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/cards/${encodeURIComponent(cardId)}/timeline`,key),
- freezeCard:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<Record<string,unknown>>(`/admin/tenants/${tenantId}/cards/${encodeURIComponent(cardId)}/freeze`,key,'POST',{idempotencyKey:crypto.randomUUID()}),
- unfreezeCard:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<Record<string,unknown>>(`/admin/tenants/${tenantId}/cards/${encodeURIComponent(cardId)}/unfreeze`,key,'POST',{idempotencyKey:crypto.randomUUID()}),
+ card:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<Record<string,unknown>>(adminRoutes.card(tenantId,cardId),key),
+ cardBalance:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<Record<string,unknown>>(adminRoutes.cardBalance(tenantId,cardId),key),
+ cardTimeline:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<unknown>(adminRoutes.cardTimeline(tenantId,cardId),key),
+ freezeCard:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<Record<string,unknown>>(adminRoutes.freezeCard(tenantId,cardId),key,'POST',{idempotencyKey:crypto.randomUUID()}),
+ unfreezeCard:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<Record<string,unknown>>(adminRoutes.unfreezeCard(tenantId,cardId),key,'POST',{idempotencyKey:crypto.randomUUID()}),
  trace:(_base:string,key:string,tenantId:string,environment:DataSource,id:string)=>apiRequest<TraceReport>(`/admin/tenants/${tenantId}/operations/traces/${encodeURIComponent(id)}?${query(environment)}`,key),
  evidence:(_base:string,token:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/evidence?${query(environment)}&limit=100`,token),
  evidenceSummary:(_base:string,token:string,tenantId:string,environment:DataSource)=>apiRequest<EvidenceSummary>(`/admin/tenants/${tenantId}/evidence/summary?${query(environment)}`,token),
