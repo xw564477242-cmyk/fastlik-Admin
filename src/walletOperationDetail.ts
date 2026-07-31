@@ -1,7 +1,15 @@
+import {
+  parseWalletOperationDetail,
+  WalletOperationContractError,
+  type WalletOperationDetail,
+} from './walletOperationParser.ts'
+import type { DataSource } from './adminRoutes'
+
 export type WalletOperationDetailState =
   | { status: 'IDLE' | 'LOADING' }
-  | { status: 'SUCCESS'; value: unknown }
+  | { status: 'SUCCESS'; value: WalletOperationDetail }
   | { status: 'NOT_FOUND'; message: string }
+  | { status: 'CONTRACT_ERROR'; message: string }
   | { status: 'ERROR'; message: string }
 
 type ApiFailure = { status?: unknown; message?: unknown }
@@ -12,8 +20,19 @@ export const idleWalletOperationDetail = (): WalletOperationDetailState =>
 export const loadingWalletOperationDetail = (): WalletOperationDetailState =>
   ({ status: 'LOADING' })
 
-export const loadedWalletOperationDetail = (value: unknown): WalletOperationDetailState =>
-  ({ status: 'SUCCESS', value })
+export function loadedWalletOperationDetail(
+  value: unknown,
+  expected: { operationId: string; tenantId: string; environment: DataSource },
+): WalletOperationDetailState {
+  try {
+    return { status: 'SUCCESS', value: parseWalletOperationDetail(value, expected) }
+  } catch (error) {
+    if (error instanceof WalletOperationContractError) {
+      return { status: 'CONTRACT_ERROR', message: error.message }
+    }
+    throw error
+  }
+}
 
 export const missingWalletOperationDetail = () => ({
   busy: false as const,
