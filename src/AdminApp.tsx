@@ -54,6 +54,13 @@ import {
   invalidateRequests,
   syncRequestScope,
 } from './requestGeneration'
+import {
+  cardWorkspaceBaseScope,
+  cardWorkspaceRequestScope,
+  parseCardWorkspaceResponse,
+  type CardWorkspaceAction,
+  type CardWorkspaceView,
+} from './cardWorkspaceContract'
 
 type NavId =
   | 'overview'
@@ -440,28 +447,61 @@ function Permissions({ session }: { session: AdminSession }) {
 
 function CardWorkspace({ session, tenantId, mode }: { session: AdminSession; tenantId: string; mode: 'card' | 'history' }) {
   const [cardId, setCardId] = useState('')
-  const [value, setValue] = useState<unknown>(null)
+  const [view, setView] = useState<CardWorkspaceView | null>(null)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
-  const run = async (action: 'read' | 'balance' | 'freeze' | 'unfreeze' | 'history') => {
-    if (!cardId.trim()) return
+  const source = session.user.environment as DataSource
+  const baseScope = cardWorkspaceBaseScope(session.user.id, tenantId, source, mode)
+  const requestGate = useRef(createRequestGate(baseScope))
+  const run = async (action: CardWorkspaceAction) => {
+    const id = cardId.trim()
+    if (!id) {
+      invalidateRequests(requestGate.current)
+      setBusy('')
+      setError('请输入真实 Card ID')
+      setView(null)
+      return
+    }
+    const requestScope = cardWorkspaceRequestScope(session.user.id, tenantId, source, mode, id, action)
+    const ticket = beginRequest(requestGate.current, requestScope)
     setBusy(action)
     setError('')
-    setValue(null)
+    setView(null)
     try {
-      const id = cardId.trim()
-      if (action === 'read') setValue(await productionApi.card(DEFAULT_API, session.accessToken, tenantId, id))
-      if (action === 'balance') setValue(await productionApi.cardBalance(DEFAULT_API, session.accessToken, tenantId, id))
-      if (action === 'history') setValue(await productionApi.cardTimeline(DEFAULT_API, session.accessToken, tenantId, id))
-      if (action === 'freeze') setValue(await productionApi.freezeCard(DEFAULT_API, session.accessToken, tenantId, id))
-      if (action === 'unfreeze') setValue(await productionApi.unfreezeCard(DEFAULT_API, session.accessToken, tenantId, id))
+      let value: unknown
+      if (action === 'read') value = await productionApi.card(DEFAULT_API, session.accessToken, tenantId, id)
+      if (action === 'balance') value = await productionApi.cardBalance(DEFAULT_API, session.accessToken, tenantId, id)
+      if (action === 'history') value = await productionApi.cardTimeline(DEFAULT_API, session.accessToken, tenantId, id)
+      if (action === 'freeze') value = await productionApi.freezeCard(DEFAULT_API, session.accessToken, tenantId, id)
+      if (action === 'unfreeze') value = await productionApi.unfreezeCard(DEFAULT_API, session.accessToken, tenantId, id)
+      if (acceptsResponse(requestGate.current, ticket, requestScope)) {
+        setView(parseCardWorkspaceResponse(action, value, id))
+      }
     } catch (error) {
-      setError(errorText(error))
+      if (acceptsResponse(requestGate.current, ticket, requestScope)) setError(errorText(error))
     } finally {
-      setBusy('')
+      if (acceptsResponse(requestGate.current, ticket, requestScope)) setBusy('')
     }
   }
-  return <><PageHeading title={mode === 'card' ? 'Card Center' : 'Card History'} tenant={tenantId} source={session.user.environment} busy={Boolean(busy)} refresh={() => void run(mode === 'card' ? 'read' : 'history')} /><section className="lookup-panel"><div><span>REAL CARD ID REQUIRED</span><h3>{mode === 'card' ? '卡片查询与生命周期控制' : '卡片生命周期审计'}</h3><p>后台目前没有卡片列表读取合同，因此必须输入真实 Card ID；系统不会生成测试卡。</p></div><form onSubmit={(event) => { event.preventDefault(); void run(mode === 'card' ? 'read' : 'history') }}><input value={cardId} onChange={(event) => setCardId(event.target.value)} placeholder="输入 Railway 数据库中的 Card ID" /><button disabled={Boolean(busy)}><Search />查询</button></form>{mode === 'card' && <div className="action-row"><button disabled={!cardId || Boolean(busy)} onClick={() => void run('balance')}>读取余额</button><button disabled={!cardId || Boolean(busy)} onClick={() => void run('freeze')}>Freeze</button><button disabled={!cardId || Boolean(busy)} onClick={() => void run('unfreeze')}>Unfreeze</button></div>}</section>{error && <div className="inline-error page-error"><AlertTriangle />{error}</div>}{value !== null && <DataCard section={{ title: mode === 'card' ? 'Card API Response' : 'Lifecycle Timeline', description: 'Data Source: Railway Backend', value }} query="" />}</>
+  useEffect(() => {
+    syncRequestScope(requestGate.current, baseScope)
+    invalidateRequests(requestGate.current)
+    setCardId('')
+    setView(null)
+    setError('')
+    setBusy('')
+  }, [baseScope])
+  const changeCardId = (next: string) => {
+    invalidateRequests(requestGate.current)
+    setCardId(next)
+    setView(null)
+    setError('')
+    setBusy('')
+  }
+  const description = view?.truncated
+    ? 'Data Source: Railway Backend · 显示最近 200 条公开事件'
+    : 'Data Source: Railway Backend · 仅显示 Admin 公开字段'
+  return <><PageHeading title={mode === 'card' ? 'Card Center' : 'Card History'} tenant={tenantId} source={source} busy={Boolean(busy)} refresh={() => void run(mode === 'card' ? 'read' : 'history')} /><section className="lookup-panel"><div><span>REAL CARD ID REQUIRED</span><h3>{mode === 'card' ? '卡片查询与生命周期控制' : '卡片生命周期审计'}</h3><p>必须输入真实 Card ID；切换租户、环境、页面或 Card ID 会立即清除旧响应。</p></div><form onSubmit={(event) => { event.preventDefault(); void run(mode === 'card' ? 'read' : 'history') }}><input value={cardId} onChange={(event) => changeCardId(event.target.value)} placeholder="输入 Railway 数据库中的 Card ID" /><button disabled={Boolean(busy)}><Search />查询</button></form>{mode === 'card' && <div className="action-row"><button disabled={!cardId || Boolean(busy)} onClick={() => void run('balance')}>读取余额</button><button disabled={!cardId || Boolean(busy)} onClick={() => void run('freeze')}>Freeze</button><button disabled={!cardId || Boolean(busy)} onClick={() => void run('unfreeze')}>Unfreeze</button></div>}</section>{error && <div className="inline-error page-error"><AlertTriangle />{error}</div>}{view?.empty && <section className="empty-state"><Search /><h3>NO CARD EVENTS</h3><p>当前 Card 没有可显示的公开生命周期事件。</p></section>}{view && !view.empty && <DataCard section={{ title: view.kind === 'TIMELINE' ? 'Lifecycle Timeline' : view.kind === 'BALANCE' ? 'Card Balance' : 'Card API Response', description, value: view.value }} query="" />}</>
 }
 
 function OperationsWorkspace({ session, tenantId }: { session: AdminSession; tenantId: string }) {
