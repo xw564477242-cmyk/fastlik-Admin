@@ -116,3 +116,24 @@ test('rejects oversized accounts and inconsistent journal or treasury summaries'
   wrongTreasury.treasury.assetCode = 'EUR'
   assert.throws(() => parseWalletOperationDetail(wrongTreasury, expected), /does not match operation asset/)
 })
+
+test('rejects duplicate returned journals even when the returned count matches declarations', () => {
+  const response = validResponse()
+  response.operation.journalIds = ['journal-1', 'journal-2']
+  response.journals.push(structuredClone(response.journals[0]))
+
+  assert.throws(
+    () => parseWalletOperationDetail(response, expected),
+    /contains duplicate returned IDs/,
+  )
+})
+
+test('rejects a missing declared journal with an exact set mismatch', () => {
+  const response = validResponse()
+  response.operation.journalIds = ['journal-1', 'journal-2']
+
+  assert.throws(
+    () => parseWalletOperationDetail(response, expected),
+    /returned ID set does not exactly match operation\.journalIds/,
+  )
+})
