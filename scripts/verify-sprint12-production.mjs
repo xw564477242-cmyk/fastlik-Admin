@@ -7,6 +7,7 @@ const sourceFiles = readdirSync(join(root, 'src')).filter((name) => /\.(ts|tsx)$
 const source = sourceFiles.map((name) => read(`src/${name}`)).join('\n')
 const app = read('src/AdminApp.tsx')
 const api = read('src/productionApi.ts')
+const routes = read('src/adminRoutes.ts')
 const runtime = read('src/runtimeConfig.ts')
 const main = read('src/main.tsx')
 
@@ -18,13 +19,15 @@ const required = [
   ['real Admin logout', api.includes('/admin/auth/logout')],
   ['Bearer authorization', api.includes('Authorization:`Bearer ${token}`')],
   ['tenant API', api.includes("'/admin/tenants'")],
-  ['wallet API', api.includes('/wallet/operations')],
+  ['wallet API', routes.includes('/wallet/operations')],
   ['ledger API', api.includes('/ledger/journals')],
   ['treasury API', api.includes('/dashboards/treasury')],
   ['settlement API', api.includes('/settlement/reconciliation')],
   ['risk API', api.includes('/dashboards/risk')],
   ['merchant API', api.includes('/merchant/payments')],
-  ['card lifecycle API', api.includes('/freeze') && api.includes('/unfreeze')],
+  ['card lifecycle API', routes.includes('/freeze') && routes.includes('/unfreeze')],
+  ['encoded tenant boundary', routes.includes('encodeURIComponent(value)')],
+  ['card mutation idempotency', (api.match(/idempotencyKey:crypto\.randomUUID\(\)/g) || []).length === 2],
   ['Trace endpoint', api.includes('/operations/traces/')],
   ['Evidence Center endpoint', api.includes('/evidence/summary')],
   ['new full Admin entrypoint', main.includes("'./admin-app.css'")],
