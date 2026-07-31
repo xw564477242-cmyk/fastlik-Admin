@@ -58,6 +58,7 @@ import {
   cardWorkspaceBaseScope,
   cardWorkspaceRequestScope,
   parseCardWorkspaceResponse,
+  visibleCardWorkspaceState,
   type CardWorkspaceAction,
   type CardWorkspaceView,
 } from './cardWorkspaceContract'
@@ -453,7 +454,11 @@ function CardWorkspace({ session, tenantId, mode }: { session: AdminSession; ten
   const source = session.user.environment as DataSource
   const baseScope = cardWorkspaceBaseScope(session.user.id, tenantId, source, mode)
   const requestGate = useRef(createRequestGate(baseScope))
+  const stateScope = useRef(baseScope)
+  const display = visibleCardWorkspaceState(stateScope.current, baseScope, { cardId, view, busy, error })
+  const scopeIsCurrent = stateScope.current === baseScope
   const run = async (action: CardWorkspaceAction) => {
+    if (!scopeIsCurrent) return
     const id = cardId.trim()
     if (!id) {
       invalidateRequests(requestGate.current)
@@ -486,6 +491,7 @@ function CardWorkspace({ session, tenantId, mode }: { session: AdminSession; ten
   useEffect(() => {
     syncRequestScope(requestGate.current, baseScope)
     invalidateRequests(requestGate.current)
+    stateScope.current = baseScope
     setCardId('')
     setView(null)
     setError('')
@@ -498,10 +504,10 @@ function CardWorkspace({ session, tenantId, mode }: { session: AdminSession; ten
     setError('')
     setBusy('')
   }
-  const description = view?.truncated
+  const description = display.view?.truncated
     ? 'Data Source: Railway Backend · 显示最近 200 条公开事件'
     : 'Data Source: Railway Backend · 仅显示 Admin 公开字段'
-  return <><PageHeading title={mode === 'card' ? 'Card Center' : 'Card History'} tenant={tenantId} source={source} busy={Boolean(busy)} refresh={() => void run(mode === 'card' ? 'read' : 'history')} /><section className="lookup-panel"><div><span>REAL CARD ID REQUIRED</span><h3>{mode === 'card' ? '卡片查询与生命周期控制' : '卡片生命周期审计'}</h3><p>必须输入真实 Card ID；切换租户、环境、页面或 Card ID 会立即清除旧响应。</p></div><form onSubmit={(event) => { event.preventDefault(); void run(mode === 'card' ? 'read' : 'history') }}><input value={cardId} onChange={(event) => changeCardId(event.target.value)} placeholder="输入 Railway 数据库中的 Card ID" /><button disabled={Boolean(busy)}><Search />查询</button></form>{mode === 'card' && <div className="action-row"><button disabled={!cardId || Boolean(busy)} onClick={() => void run('balance')}>读取余额</button><button disabled={!cardId || Boolean(busy)} onClick={() => void run('freeze')}>Freeze</button><button disabled={!cardId || Boolean(busy)} onClick={() => void run('unfreeze')}>Unfreeze</button></div>}</section>{error && <div className="inline-error page-error"><AlertTriangle />{error}</div>}{view?.empty && <section className="empty-state"><Search /><h3>NO CARD EVENTS</h3><p>当前 Card 没有可显示的公开生命周期事件。</p></section>}{view && !view.empty && <DataCard section={{ title: view.kind === 'TIMELINE' ? 'Lifecycle Timeline' : view.kind === 'BALANCE' ? 'Card Balance' : 'Card API Response', description, value: view.value }} query="" />}</>
+  return <><PageHeading title={mode === 'card' ? 'Card Center' : 'Card History'} tenant={tenantId} source={source} busy={Boolean(display.busy)} refresh={() => { if (scopeIsCurrent) void run(mode === 'card' ? 'read' : 'history') }} /><section className="lookup-panel"><div><span>REAL CARD ID REQUIRED</span><h3>{mode === 'card' ? '卡片查询与生命周期控制' : '卡片生命周期审计'}</h3><p>必须输入真实 Card ID；切换租户、环境、页面或 Card ID 会立即清除旧响应。</p></div><form onSubmit={(event) => { event.preventDefault(); if (scopeIsCurrent) void run(mode === 'card' ? 'read' : 'history') }}><input value={display.cardId} disabled={!scopeIsCurrent} onChange={(event) => changeCardId(event.target.value)} placeholder="输入 Railway 数据库中的 Card ID" /><button disabled={!scopeIsCurrent || Boolean(display.busy)}><Search />查询</button></form>{mode === 'card' && <div className="action-row"><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('balance')}>读取余额</button><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('freeze')}>Freeze</button><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('unfreeze')}>Unfreeze</button></div>}</section>{display.error && <div className="inline-error page-error"><AlertTriangle />{display.error}</div>}{display.view?.empty && <section className="empty-state"><Search /><h3>NO CARD EVENTS</h3><p>当前 Card 没有可显示的公开生命周期事件。</p></section>}{display.view && !display.view.empty && <DataCard section={{ title: display.view.kind === 'TIMELINE' ? 'Lifecycle Timeline' : display.view.kind === 'BALANCE' ? 'Card Balance' : 'Card API Response', description, value: display.view.value }} query="" />}</>
 }
 
 function OperationsWorkspace({ session, tenantId }: { session: AdminSession; tenantId: string }) {

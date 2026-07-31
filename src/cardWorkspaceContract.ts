@@ -10,7 +10,27 @@ export type CardWorkspaceView = {
   truncated: boolean
 }
 
+export type CardWorkspaceDisplayState = {
+  cardId: string
+  view: CardWorkspaceView | null
+  busy: string
+  error: string
+}
+
 export const MAX_CARD_TIMELINE_ITEMS = 200
+
+const hiddenCardWorkspaceState: CardWorkspaceDisplayState = {
+  cardId: '',
+  view: null,
+  busy: '',
+  error: '',
+}
+
+export const visibleCardWorkspaceState = (
+  stateScope: string,
+  currentBaseScope: string,
+  state: CardWorkspaceDisplayState,
+): CardWorkspaceDisplayState => stateScope === currentBaseScope ? state : hiddenCardWorkspaceState
 
 const record = (value: unknown, label: string): Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} contract is invalid`)

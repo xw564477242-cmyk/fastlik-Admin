@@ -5,6 +5,7 @@ import {
   cardWorkspaceBaseScope,
   cardWorkspaceRequestScope,
   parseCardWorkspaceResponse,
+  visibleCardWorkspaceState,
 } from '../src/cardWorkspaceContract.ts'
 import {
   acceptsResponse,
@@ -12,6 +13,22 @@ import {
   createRequestGate,
   syncRequestScope,
 } from '../src/requestGeneration.ts'
+
+test('scope mismatch hides old Card state on the first render before effects run', () => {
+  const oldScope = cardWorkspaceBaseScope('admin-1', 'tenant-a', 'TEST', 'card')
+  const nextScope = cardWorkspaceBaseScope('admin-1', 'tenant-b', 'UAT', 'history')
+  const oldState = {
+    cardId: 'card-private',
+    view: { kind: 'CARD', value: { id: 'card-private', last4: '4242' }, empty: false, truncated: false },
+    busy: 'read',
+    error: 'old-scope error',
+  }
+
+  assert.deepEqual(visibleCardWorkspaceState(oldScope, nextScope, oldState), {
+    cardId: '', view: null, busy: '', error: '',
+  })
+  assert.equal(visibleCardWorkspaceState(oldScope, oldScope, oldState), oldState)
+})
 
 test('tenant, environment, route, Card ID and action changes reject old Card responses', () => {
   const firstScope = cardWorkspaceRequestScope('admin-1', 'tenant-a', 'TEST', 'card', 'card-a', 'read')
