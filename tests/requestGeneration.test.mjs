@@ -7,6 +7,7 @@ import {
   invalidateRequests,
   syncRequestScope,
 } from '../src/requestGeneration.ts'
+import { missingWalletOperationDetail } from '../src/walletOperationDetail.ts'
 
 test('only the latest request in one scope may update the page', () => {
   const gate = createRequestGate('tenant-a|TEST|wallet')
@@ -37,4 +38,24 @@ test('explicit invalidation rejects in-flight responses', () => {
   invalidateRequests(gate)
 
   assert.equal(acceptsResponse(gate, ticket, gate.scope), false)
+})
+
+test('an empty operation lookup clears busy and still rejects the in-flight response', () => {
+  const gate = createRequestGate('tenant-a|TEST|operation')
+  const inFlight = beginRequest(gate, gate.scope)
+  let busy = true
+
+  const emptyLookup = beginRequest(gate, gate.scope)
+  const reset = missingWalletOperationDetail()
+  busy = reset.busy
+
+  assert.equal(busy, false)
+  assert.deepEqual(reset.sections, [])
+  assert.equal(reset.pageError, '')
+  assert.deepEqual(reset.detail, {
+    status: 'ERROR',
+    message: '请输入真实 Wallet Operation ID',
+  })
+  assert.equal(acceptsResponse(gate, inFlight, gate.scope), false)
+  assert.equal(acceptsResponse(gate, emptyLookup, gate.scope), true)
 })
