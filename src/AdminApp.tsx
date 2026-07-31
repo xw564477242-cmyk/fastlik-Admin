@@ -44,8 +44,16 @@ import {
   idleWalletOperationDetail,
   loadedWalletOperationDetail,
   loadingWalletOperationDetail,
+  missingWalletOperationDetail,
   type WalletOperationDetailState,
 } from './walletOperationDetail'
+import {
+  acceptsResponse,
+  beginRequest,
+  createRequestGate,
+  invalidateRequests,
+  syncRequestScope,
+} from './requestGeneration'
 
 type NavId =
   | 'overview'
@@ -463,16 +471,22 @@ function OperationsWorkspace({ session, tenantId }: { session: AdminSession; ten
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [operationDetail, setOperationDetail] = useState<WalletOperationDetailState>(idleWalletOperationDetail)
-  const operationRequest = useRef(0)
   const source = session.user.environment as DataSource
+  const requestScope = `${tenantId}\u0000${source}\u0000${tab}`
+  const requestGate = useRef(createRequestGate(requestScope))
+  syncRequestScope(requestGate.current, requestScope)
   const run = async () => {
+    const ticket = beginRequest(requestGate.current, requestScope)
     if (tab === 'operation') {
       const operationId = lookup.trim()
       if (!operationId) {
-        setOperationDetail({ status: 'ERROR', message: '请输入真实 Wallet Operation ID' })
+        const missing = missingWalletOperationDetail()
+        setBusy(missing.busy)
+        setSections([...missing.sections])
+        setError(missing.pageError)
+        setOperationDetail(missing.detail)
         return
       }
-      const requestId = ++operationRequest.current
       setBusy(true)
       setError('')
       setSections([])
@@ -485,11 +499,11 @@ function OperationsWorkspace({ session, tenantId }: { session: AdminSession; ten
           operationId,
           source,
         )
-        if (requestId === operationRequest.current) setOperationDetail(loadedWalletOperationDetail(value))
+        if (acceptsResponse(requestGate.current, ticket, requestScope)) setOperationDetail(loadedWalletOperationDetail(value))
       } catch (error) {
-        if (requestId === operationRequest.current) setOperationDetail(failedWalletOperationDetail(error))
+        if (acceptsResponse(requestGate.current, ticket, requestScope)) setOperationDetail(failedWalletOperationDetail(error))
       } finally {
-        if (requestId === operationRequest.current) setBusy(false)
+        if (acceptsResponse(requestGate.current, ticket, requestScope)) setBusy(false)
       }
       return
     }
@@ -498,25 +512,28 @@ function OperationsWorkspace({ session, tenantId }: { session: AdminSession; ten
     setSections([])
     try {
       if (tab === 'wallet') {
-        setSections(await Promise.all([
+        const next = await Promise.all([
           settledSection('Wallet Operations', 'Deposit, transfer and withdrawal operations', productionApi.walletOperations(DEFAULT_API, session.accessToken, tenantId, source)),
           settledSection('Wallet Transactions', 'Real transaction history', productionApi.walletTransactions(DEFAULT_API, session.accessToken, tenantId, source)),
-        ]))
+        ])
+        if (acceptsResponse(requestGate.current, ticket, requestScope)) setSections(next)
       } else if (tab === 'user') {
         if (!lookup.trim()) throw new Error('请输入真实 User ID')
-        setSections([{ title: 'User & KYC', description: 'Real user detail and KYC status', value: await productionApi.user(DEFAULT_API, session.accessToken, tenantId, source, lookup.trim()) }])
+        const value = await productionApi.user(DEFAULT_API, session.accessToken, tenantId, source, lookup.trim())
+        if (acceptsResponse(requestGate.current, ticket, requestScope)) setSections([{ title: 'User & KYC', description: 'Real user detail and KYC status', value }])
       } else {
         if (!lookup.trim()) throw new Error('请输入真实 Trace ID')
-        setSections([{ title: 'End-to-End Trace', description: 'Customer → Wallet → Card → Journal → Treasury → Settlement → Webhook → Audit', value: await productionApi.trace(DEFAULT_API, session.accessToken, tenantId, source, lookup.trim()) }])
+        const value = await productionApi.trace(DEFAULT_API, session.accessToken, tenantId, source, lookup.trim())
+        if (acceptsResponse(requestGate.current, ticket, requestScope)) setSections([{ title: 'End-to-End Trace', description: 'Customer → Wallet → Card → Journal → Treasury → Settlement → Webhook → Audit', value }])
       }
     } catch (error) {
-      setError(errorText(error))
+      if (acceptsResponse(requestGate.current, ticket, requestScope)) setError(errorText(error))
     } finally {
-      setBusy(false)
+      if (acceptsResponse(requestGate.current, ticket, requestScope)) setBusy(false)
     }
   }
   useEffect(() => {
-    operationRequest.current += 1
+    invalidateRequests(requestGate.current)
     setLookup('')
     setOperationDetail(idleWalletOperationDetail())
     if (tab === 'wallet') void run()
@@ -525,9 +542,9 @@ function OperationsWorkspace({ session, tenantId }: { session: AdminSession; ten
       setError('')
       setBusy(false)
     }
-  }, [tenantId, tab]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tenantId, tab, source]) // eslint-disable-line react-hooks/exhaustive-deps
   const switchTab = (next: 'wallet' | 'operation' | 'user' | 'trace') => {
-    operationRequest.current += 1
+    invalidateRequests(requestGate.current)
     setTab(next)
     setLookup('')
     setSections([])
