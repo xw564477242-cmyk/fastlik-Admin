@@ -155,7 +155,14 @@ export function parseWalletOperationDetail(
       assetCodes: [...new Set(entries.map((entry) => entry.assetCode))].join(', '),
     }
   })
-  if (journals.length !== journalIds.length) fail('journals', 'does not match operation.journalIds')
+  const returnedJournalIds = journals.map((journal) => journal.id)
+  if (new Set(returnedJournalIds).size !== returnedJournalIds.length) {
+    fail('journals', 'contains duplicate returned IDs')
+  }
+  if (
+    returnedJournalIds.length !== journalIds.length ||
+    journalIds.some((id) => !returnedJournalIds.includes(id))
+  ) fail('journals', 'returned ID set does not exactly match operation.journalIds')
 
   const treasuryValue = root.treasury
   const treasury = treasuryValue === null ? null : (() => {
