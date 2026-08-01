@@ -41,6 +41,16 @@ export function abortCurrentRequest(slot: RequestAbortSlot): void {
   slot.current = null
 }
 
+export function transitionRequestBaseScope(
+  gate: RequestGate,
+  slot: RequestAbortSlot,
+  baseScope: string,
+): void {
+  syncRequestScope(gate, baseScope)
+  abortCurrentRequest(slot)
+  invalidateRequests(gate)
+}
+
 export const acceptsResponse = (
   gate: RequestGate,
   ticket: RequestTicket,

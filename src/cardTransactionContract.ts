@@ -367,7 +367,7 @@ export const cardTransactionDetailScope = (
 export function adminCardTransactionContractEvidence(sourceCommit: string) {
   if (!/^[a-f0-9]{40}$/.test(sourceCommit)) throw new Error('SOURCE_SHA must be a lowercase 40-character commit SHA')
   return Object.freeze({
-    format: 'fastlink-admin-card-transaction-contract-v1',
+    format: 'fastlink-admin-card-transaction-contract-v2',
     sourceCommit,
     environment: 'NON_PRODUCTION',
     runtimeEnvironments: Object.freeze(['SANDBOX', 'TEST']),
@@ -384,5 +384,20 @@ export function adminCardTransactionContractEvidence(sourceCommit: string) {
     requestGenerationBound: true,
     activeCancellationRequired: true,
     selectionClearedOnFilterChange: true,
+    mountedRequestLifecycle: Object.freeze({
+      busyRenderPreservesActiveScope: true,
+      baseScopeChangesEffectOnly: true,
+      lateCompletionWrites: 0,
+    }),
+    mountedAdversarialInvalidations: Object.freeze([
+      'cardId',
+      'filter',
+      'listSnapshot',
+      'actorId',
+      'tenantId',
+      'environment',
+      'unmount',
+      'repeat',
+    ]),
   })
 }

@@ -90,8 +90,20 @@ jobs:
           SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
-          printf '{"format":"fastlink-admin-pr-evidence-v1","sourceCommit":"%s","environment":"NON_PRODUCTION"}\n' "$SOURCE_SHA" > build-evidence.json
-          sha256sum dist/index.html dist/runtime-config.js package-lock.json build-evidence.json card-transaction-contract-evidence.json > build-provenance.sha256
+          printf '{"format":"fastlink-admin-pr-evidence-v2","sourceCommit":"%s","environment":"NON_PRODUCTION","cardTransactionLifecycleEvidence":"card-transaction-contract-evidence.json"}\n' "$SOURCE_SHA" > build-evidence.json
+          sha256sum \
+            dist/index.html \
+            dist/runtime-config.js \
+            package-lock.json \
+            src/AdminApp.tsx \
+            src/requestGeneration.ts \
+            src/cardTransactionContract.ts \
+            tests/cardTransactionMountedLifecycle.test.mjs \
+            scripts/write-card-transaction-evidence.mjs \
+            scripts/verify-card-transaction-evidence.mjs \
+            build-evidence.json \
+            card-transaction-contract-evidence.json \
+            > build-provenance.sha256
           sha256sum --check build-provenance.sha256
 
       - name: Upload non-production build evidence
@@ -101,6 +113,12 @@ jobs:
           path: |
             dist/
             package-lock.json
+            src/AdminApp.tsx
+            src/requestGeneration.ts
+            src/cardTransactionContract.ts
+            tests/cardTransactionMountedLifecycle.test.mjs
+            scripts/write-card-transaction-evidence.mjs
+            scripts/verify-card-transaction-evidence.mjs
             build-evidence.json
             card-transaction-contract-evidence.json
             build-provenance.sha256

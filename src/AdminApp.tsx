@@ -57,6 +57,7 @@ import {
   invalidateRequests,
   replaceRequestAbort,
   syncRequestScope,
+  transitionRequestBaseScope,
 } from './requestGeneration'
 import {
   ADMIN_CARD_TRANSACTION_STATUS_BY_TYPE,
@@ -546,7 +547,6 @@ function CardWorkspace({ session, tenantId, mode }: { session: AdminSession; ten
   const source = session.user.environment as DataSource
   const baseScope = cardWorkspaceBaseScope(session.user.id, session.expiresAt, tenantId, source, mode)
   const requestGate = useRef(createRequestGate(baseScope))
-  syncRequestScope(requestGate.current, baseScope)
   const stateScope = useRef(baseScope)
   const display = visibleCardWorkspaceState(stateScope.current, baseScope, { cardId, view, busy, error })
   const scopeIsCurrent = stateScope.current === baseScope
@@ -647,9 +647,7 @@ function CardWorkspace({ session, tenantId, mode }: { session: AdminSession; ten
   }, [])
 
   useEffect(() => {
-    syncRequestScope(requestGate.current, baseScope)
-    abortCurrentRequest(transactionAbort)
-    invalidateRequests(requestGate.current)
+    transitionRequestBaseScope(requestGate.current, transactionAbort, baseScope)
     stateScope.current = baseScope
     setCardId('')
     setView(null)
