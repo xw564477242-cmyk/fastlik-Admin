@@ -49,6 +49,8 @@ export type CardWorkspaceDisplayState = {
 }
 
 export const MAX_CARD_TIMELINE_ITEMS = 200
+export const MAX_CARD_WORKSPACE_JSON_BYTES = 262_144
+export const MAX_CARD_WORKSPACE_JSON_DEPTH = 16
 
 const hiddenCardWorkspaceState: CardWorkspaceDisplayState = {
   cardId: '',
@@ -83,41 +85,47 @@ type OwnData = Readonly<Record<string, PropertyDescriptor>>
 
 const invalid = (code: ContractCode): never => { throw new CardWorkspaceContractError(code) }
 
-/**
- * Verify that every payload node is composed only of ordinary own data properties.
- * Descriptor reads never execute getters. structuredClone then fails closed on Proxy
- * instances after accessors and non-ordinary prototypes have already been rejected.
- */
-const assertOrdinaryDataGraph = (value: unknown, code: ContractCode, seen = new Set<object>()): void => {
-  if (value === null || typeof value !== 'object') return
-  if (seen.has(value)) invalid(code)
-  seen.add(value)
+const jsonDepthWithinLimit = (raw: string): boolean => {
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (const character of raw) {
+    if (inString) {
+      if (escaped) escaped = false
+      else if (character === '\\') escaped = true
+      else if (character === '"') inString = false
+      continue
+    }
+    if (character === '"') inString = true
+    else if (character === '{' || character === '[') {
+      depth += 1
+      if (depth > MAX_CARD_WORKSPACE_JSON_DEPTH) return false
+    } else if (character === '}' || character === ']') {
+      depth -= 1
+      if (depth < 0) return false
+    }
+  }
+  return !inString && !escaped && depth === 0
+}
+
+const boundedJson = (wireValue: unknown, code: ContractCode): unknown => {
+  if (typeof wireValue !== 'string' || wireValue.length === 0) invalid(code)
+  // UTF-8 is never shorter than the number of UTF-16 code units for valid JSON.
+  // Reject obviously oversized input before allocating an encoded copy.
+  if (wireValue.length > MAX_CARD_WORKSPACE_JSON_BYTES) invalid(code)
+  if (new TextEncoder().encode(wireValue).byteLength > MAX_CARD_WORKSPACE_JSON_BYTES) invalid(code)
+  if (!jsonDepthWithinLimit(wireValue)) invalid(code)
   try {
-    const prototype = Object.getPrototypeOf(value)
-    if (Array.isArray(value)) {
-      if (prototype !== Array.prototype) invalid(code)
-    } else if (prototype !== Object.prototype) {
-      invalid(code)
-    }
-    const descriptors = Object.getOwnPropertyDescriptors(value)
-    for (const key of Reflect.ownKeys(descriptors)) {
-      if (typeof key !== 'string') invalid(code)
-      const descriptor = descriptors[key]
-      if (!descriptor || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) invalid(code)
-      if (key !== 'length') assertOrdinaryDataGraph(descriptor.value, code, seen)
-    }
-  } catch (error) {
-    if (error instanceof CardWorkspaceContractError) throw error
-    invalid(code)
+    return JSON.parse(wireValue) as unknown
+  } catch {
+    return invalid(code)
   }
 }
 
 const ordinaryOwnData = (value: unknown, code: ContractCode): OwnData => {
-  assertOrdinaryDataGraph(value, code)
   if (!value || typeof value !== 'object' || Array.isArray(value)) invalid(code)
   try {
-    if (typeof structuredClone !== 'function') invalid(code)
-    structuredClone(value)
+    if (Object.getPrototypeOf(value) !== Object.prototype) invalid(code)
     return Object.getOwnPropertyDescriptors(value)
   } catch (error) {
     if (error instanceof CardWorkspaceContractError) throw error
@@ -205,7 +213,6 @@ const optionalScalar = (target: CardTimelineItem, source: OwnData, key: keyof Ca
 }
 
 const publicTimeline = (value: unknown, expectedCardId: string): CardWorkspaceView => {
-  assertOrdinaryDataGraph(value, 'INVALID_CARD_TIMELINE')
   if (!Array.isArray(value)) invalid('INVALID_CARD_TIMELINE')
   const items = value.slice(0, MAX_CARD_TIMELINE_ITEMS).map((entry) => {
     const source = ordinaryOwnData(entry, 'INVALID_CARD_TIMELINE')
@@ -242,9 +249,15 @@ export const cardWorkspaceRequestScope = (
 
 export function parseCardWorkspaceResponse(
   action: CardWorkspaceAction,
-  value: unknown,
+  wireValue: unknown,
   expectedCardId: string,
 ): CardWorkspaceView {
+  const code: ContractCode = action === 'history'
+    ? 'INVALID_CARD_TIMELINE'
+    : action === 'balance'
+      ? 'INVALID_CARD_BALANCE'
+      : 'INVALID_CARD_DETAIL'
+  const value = boundedJson(wireValue, code)
   if (action === 'history') return publicTimeline(value, expectedCardId)
   if (action === 'balance') {
     const source = ordinaryOwnData(value, 'INVALID_CARD_BALANCE')

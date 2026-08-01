@@ -1,5 +1,6 @@
 import { runtimeConfig } from './runtimeConfig'
 import { adminRoutes, type DataSource } from './adminRoutes'
+import { MAX_CARD_WORKSPACE_JSON_BYTES } from './cardWorkspaceContract'
 
 export const DEFAULT_API = runtimeConfig.apiUrl
 export type { DataSource } from './adminRoutes'
@@ -38,7 +39,40 @@ export class ApiError extends Error {
 
 const newTrace=()=>crypto.randomUUID()
 
-export async function apiRequest<T>(path:string,token?:string,method='GET',body?:unknown):Promise<T>{
+type ApiResponsePolicy =
+ | Readonly<{format:'json'}>
+ | Readonly<{format:'bounded-text';maxBytes:number}>
+
+const jsonResponsePolicy:ApiResponsePolicy={format:'json'}
+
+const readBoundedResponseText=async(response:Response,maxBytes:number):Promise<string>=>{
+ const contentLength=response.headers.get('content-length')
+ if(contentLength!==null){
+  const declaredBytes=Number(contentLength)
+  if(Number.isFinite(declaredBytes)&&declaredBytes>maxBytes)throw new Error('API response exceeds the allowed size')
+ }
+ if(!response.body){
+  const text=await response.text()
+  if(new TextEncoder().encode(text).byteLength>maxBytes)throw new Error('API response exceeds the allowed size')
+  return text
+ }
+ const reader=response.body.getReader();const chunks:Uint8Array[]=[];let totalBytes=0
+ try{
+  for(;;){
+   const {done,value}=await reader.read()
+   if(done)break
+   if(!value)continue
+   totalBytes+=value.byteLength
+   if(totalBytes>maxBytes){await reader.cancel();throw new Error('API response exceeds the allowed size')}
+   chunks.push(value)
+  }
+ }finally{reader.releaseLock()}
+ const bytes=new Uint8Array(totalBytes);let offset=0
+ for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength}
+ return new TextDecoder('utf-8',{fatal:true}).decode(bytes)
+}
+
+export async function apiRequest<T>(path:string,token?:string,method='GET',body?:unknown,responsePolicy:ApiResponsePolicy=jsonResponsePolicy):Promise<T>{
  const controller=new AbortController();const timeout=window.setTimeout(()=>controller.abort(),20_000);const trace=newTrace()
  try{
   const response=await fetch(`${DEFAULT_API}${path}`,{
@@ -49,9 +83,15 @@ export async function apiRequest<T>(path:string,token?:string,method='GET',body?
   const returned=response.headers.get('x-trace-id')||trace
   if(!response.ok){
    let message=`API ${response.status}`
-   try{const payload=await response.json();message=Array.isArray(payload.message)?payload.message.join(', '):(payload.message||message)}catch{}
+   try{
+    const payload=responsePolicy.format==='bounded-text'
+     ? JSON.parse(await readBoundedResponseText(response,responsePolicy.maxBytes))
+     : await response.json()
+    message=Array.isArray(payload.message)?payload.message.join(', '):(payload.message||message)
+   }catch{}
    throw new ApiError(response.status,path,returned,`${message} · HTTP ${response.status} · Trace ${returned}`)
   }
+  if(responsePolicy.format==='bounded-text')return await readBoundedResponseText(response,responsePolicy.maxBytes) as T
   return response.json() as Promise<T>
  }catch(error){
   if(error instanceof ApiError)throw error
@@ -107,11 +147,11 @@ export const productionApi={
  apiClients:(_base:string,key:string,tenantId:string)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/api-clients`,key),
  events:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/events?${query(environment)}`,key),
  user:(_base:string,key:string,tenantId:string,environment:DataSource,userId:string)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/users/${encodeURIComponent(userId)}?${query(environment)}`,key),
- card:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<unknown>(adminRoutes.card(tenantId,cardId),key),
- cardBalance:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<unknown>(adminRoutes.cardBalance(tenantId,cardId),key),
- cardTimeline:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<unknown>(adminRoutes.cardTimeline(tenantId,cardId),key),
- freezeCard:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<Record<string,unknown>>(adminRoutes.freezeCard(tenantId,cardId),key,'POST',{idempotencyKey:crypto.randomUUID()}),
- unfreezeCard:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<Record<string,unknown>>(adminRoutes.unfreezeCard(tenantId,cardId),key,'POST',{idempotencyKey:crypto.randomUUID()}),
+ card:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.card(tenantId,cardId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
+ cardBalance:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.cardBalance(tenantId,cardId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
+ cardTimeline:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.cardTimeline(tenantId,cardId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
+ freezeCard:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.freezeCard(tenantId,cardId),key,'POST',{idempotencyKey:crypto.randomUUID()},{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
+ unfreezeCard:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.unfreezeCard(tenantId,cardId),key,'POST',{idempotencyKey:crypto.randomUUID()},{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
  trace:(_base:string,key:string,tenantId:string,environment:DataSource,id:string)=>apiRequest<TraceReport>(`/admin/tenants/${tenantId}/operations/traces/${encodeURIComponent(id)}?${query(environment)}`,key),
  evidence:(_base:string,token:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/evidence?${query(environment)}&limit=100`,token),
  evidenceSummary:(_base:string,token:string,tenantId:string,environment:DataSource)=>apiRequest<EvidenceSummary>(`/admin/tenants/${tenantId}/evidence/summary?${query(environment)}`,token),
