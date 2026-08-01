@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "node scripts/verify-sprint12-production.mjs && node --experimental-strip-types --test tests/*.test.mjs",
     "test:dev": "node scripts/verify-dev-admin.mjs",
-    "test:cloudflare": "node scripts/verify-cloudflare.mjs"
+    "test:cloudflare": "node scripts/verify-cloudflare.mjs",
+    "evidence:card-transactions": "node --experimental-strip-types scripts/write-card-transaction-evidence.mjs && node --experimental-strip-types scripts/verify-card-transaction-evidence.mjs"
   },
   "dependencies": {
     "lucide-react": "0.468.0",
@@ -21,6 +22,7 @@
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
     "@vitejs/plugin-react": "6.0.4",
+    "react-test-renderer": "18.3.1",
     "typescript": "5.7.2",
     "vite": "8.1.5"
   }

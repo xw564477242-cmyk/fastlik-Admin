@@ -74,6 +74,24 @@
   font-weight: 700;
 }
 
+.card-transaction-detail-select {
+  display: grid;
+  gap: 0.4rem;
+  max-width: 28rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.card-transaction-detail-select select {
+  min-height: 2.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: var(--panel);
+  color: inherit;
+  padding: 0 0.75rem;
+}
+
 .card-transaction-results {
   margin-top: 16px;
 }

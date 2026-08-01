@@ -8,6 +8,8 @@ export type RequestTicket = Readonly<{
   scope: string
 }>
 
+export type RequestAbortSlot = { current: AbortController | null }
+
 export const createRequestGate = (scope: string): RequestGate =>
   ({ generation: 0, scope })
 
@@ -25,6 +27,28 @@ export function beginRequest(gate: RequestGate, scope: string): RequestTicket {
 
 export function invalidateRequests(gate: RequestGate): void {
   gate.generation += 1
+}
+
+export function replaceRequestAbort(slot: RequestAbortSlot): AbortController {
+  slot.current?.abort()
+  const controller = new AbortController()
+  slot.current = controller
+  return controller
+}
+
+export function abortCurrentRequest(slot: RequestAbortSlot): void {
+  slot.current?.abort()
+  slot.current = null
+}
+
+export function transitionRequestBaseScope(
+  gate: RequestGate,
+  slot: RequestAbortSlot,
+  baseScope: string,
+): void {
+  syncRequestScope(gate, baseScope)
+  abortCurrentRequest(slot)
+  invalidateRequests(gate)
 }
 
 export const acceptsResponse = (

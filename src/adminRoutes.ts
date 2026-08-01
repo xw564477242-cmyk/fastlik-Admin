@@ -7,6 +7,10 @@ export const ADMIN_CARD_TRANSACTION_STATUSES = [
   'REVERSED',
   'REFUNDED',
 ] as const
+export const ADMIN_CARD_TRANSACTION_STATUS_FILTERS = [
+  'ALL',
+  ...ADMIN_CARD_TRANSACTION_STATUSES,
+] as const
 export const ADMIN_CARD_TRANSACTION_TYPES = [
   'AUTHORIZATION',
   'CLEARING',
@@ -18,6 +22,7 @@ export const ADMIN_CARD_TRANSACTION_TYPES = [
 export const MAX_ADMIN_CARD_TRANSACTION_CURSOR_LENGTH = 512
 
 export type AdminCardTransactionStatus = (typeof ADMIN_CARD_TRANSACTION_STATUSES)[number]
+export type AdminCardTransactionStatusFilter = (typeof ADMIN_CARD_TRANSACTION_STATUS_FILTERS)[number]
 export type AdminCardTransactionType = (typeof ADMIN_CARD_TRANSACTION_TYPES)[number]
 
 export const ADMIN_CARD_TRANSACTION_STATUS_BY_TYPE: Readonly<Record<AdminCardTransactionType, AdminCardTransactionStatus>> = Object.freeze({
@@ -30,7 +35,7 @@ export const ADMIN_CARD_TRANSACTION_STATUS_BY_TYPE: Readonly<Record<AdminCardTra
 })
 
 export type AdminCardTransactionQuery = Readonly<{
-  status?: AdminCardTransactionStatus
+  status: AdminCardTransactionStatusFilter
   type?: AdminCardTransactionType
   currency?: string
   from?: string
@@ -42,15 +47,43 @@ const segment = (value: string) => encodeURIComponent(value)
 const environmentQuery = (environment: DataSource) =>
   `environment=${encodeURIComponent(environment)}`
 
+export const isCanonicalSignedAdminCardTransactionCursor = (cursor: unknown): cursor is string => {
+  if (
+    typeof cursor !== 'string'
+    || cursor.length === 0
+    || cursor.length > MAX_ADMIN_CARD_TRANSACTION_CURSOR_LENGTH
+    || !/^[A-Za-z0-9_-]+$/.test(cursor)
+  ) return false
+  try {
+    const base64 = cursor.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')
+    const binary = atob(padded)
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+    const canonical = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+    if (canonical !== cursor) return false
+    const payload = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.getPrototypeOf(payload) !== Object.prototype) return false
+    const keys = Object.keys(payload).sort()
+    if (keys.join(',') !== 'i,m,s,v') return false
+    const record = payload as Record<string, unknown>
+    return record.v === 1
+      && typeof record.s === 'string' && /^[a-f0-9]{64}$/.test(record.s)
+      && typeof record.i === 'string' && /^[A-Za-z0-9_-]{2,128}$/.test(record.i)
+      && typeof record.m === 'string' && /^[A-Za-z0-9_-]{43}$/.test(record.m)
+  } catch {
+    return false
+  }
+}
+
 const cardTransactionQuery = (query: AdminCardTransactionQuery, cursor?: string): string => {
   if (!Number.isInteger(query.limit) || query.limit < 1 || query.limit > 25) throw new Error('Card transaction limit must be between 1 and 25')
-  if (query.status && !(ADMIN_CARD_TRANSACTION_STATUSES as readonly string[]).includes(query.status)) {
+  if (!(ADMIN_CARD_TRANSACTION_STATUS_FILTERS as readonly string[]).includes(query.status)) {
     throw new Error('Card transaction status is invalid')
   }
   if (query.type && !(ADMIN_CARD_TRANSACTION_TYPES as readonly string[]).includes(query.type)) {
     throw new Error('Card transaction type is invalid')
   }
-  if (query.status && query.type && ADMIN_CARD_TRANSACTION_STATUS_BY_TYPE[query.type] !== query.status) {
+  if (query.status !== 'ALL' && query.type && ADMIN_CARD_TRANSACTION_STATUS_BY_TYPE[query.type] !== query.status) {
     throw new Error('Card transaction status and type do not match')
   }
   if (query.currency && !/^[A-Z]{3}$/.test(query.currency)) throw new Error('Card transaction currency is invalid')
@@ -62,11 +95,11 @@ const cardTransactionQuery = (query: AdminCardTransactionQuery, cursor?: string)
     }
   }
   if (query.from && query.to && query.from > query.to) throw new Error('Card transaction date range is invalid')
-  if (cursor && (cursor.length > MAX_ADMIN_CARD_TRANSACTION_CURSOR_LENGTH || !/^[A-Za-z0-9_-]+$/.test(cursor))) {
+  if (cursor && !isCanonicalSignedAdminCardTransactionCursor(cursor)) {
     throw new Error('Card transaction cursor is invalid')
   }
   const params = new URLSearchParams()
-  if (query.status) params.set('status', query.status)
+  if (query.status !== 'ALL') params.set('status', query.status)
   if (query.type) params.set('type', query.type)
   if (query.currency) params.set('currency', query.currency)
   if (query.from) params.set('from', query.from)
@@ -95,6 +128,8 @@ export const adminRoutes = {
     `${adminRoutes.card(tenantId, cardId)}/timeline`,
   cardTransactions: (tenantId: string, cardId: string, query: AdminCardTransactionQuery, cursor?: string) =>
     `${adminRoutes.card(tenantId, cardId)}/transactions?${cardTransactionQuery(query, cursor)}`,
+  cardTransaction: (tenantId: string, cardId: string, transactionId: string) =>
+    `${adminRoutes.card(tenantId, cardId)}/transactions/${segment(transactionId)}`,
   freezeCard: (tenantId: string, cardId: string) =>
     `${adminRoutes.card(tenantId, cardId)}/freeze`,
   unfreezeCard: (tenantId: string, cardId: string) =>
