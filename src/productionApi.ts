@@ -2,6 +2,7 @@ import { runtimeConfig } from './runtimeConfig'
 import { adminRoutes, type AdminCardTransactionQuery, type DataSource } from './adminRoutes'
 import { MAX_CARD_WORKSPACE_JSON_BYTES } from './cardWorkspaceContract'
 import { MAX_CARD_TRANSACTION_JSON_BYTES } from './cardTransactionContract'
+import { MAX_TREASURY_RECONCILIATION_JSON_BYTES } from './treasuryReconciliationContract'
 
 export const DEFAULT_API = runtimeConfig.apiUrl
 export type { DataSource } from './adminRoutes'
@@ -143,6 +144,9 @@ export const productionApi={
  riskDashboard:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Record<string,unknown>>(`/admin/tenants/${tenantId}/dashboards/risk?${query(environment)}`,key),
  reconciliation:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Reconciliation>(`/admin/tenants/${tenantId}/settlement/reconciliation?${query(environment)}`,key),
  trialBalance:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<TrialBalance[]>(`/admin/tenants/${tenantId}/ledger/trial-balance?${query(environment)}`,key),
+ treasuryReconciliation:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryReconciliation(tenantId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_RECONCILIATION_JSON_BYTES},signal),
+ treasuryTrialBalance:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryTrialBalance(tenantId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_RECONCILIATION_JSON_BYTES},signal),
+ treasuryDailyClosing:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryDailyClosing(tenantId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_RECONCILIATION_JSON_BYTES},signal),
  accounts:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<WalletAccount[]>(`/admin/tenants/${tenantId}/ledger/accounts?${query(environment)}`,key),
  journals:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Journal[]>(`/admin/tenants/${tenantId}/ledger/journals?${query(environment)}`,key),
  walletOperations:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(adminRoutes.walletOperations(tenantId,environment),key),

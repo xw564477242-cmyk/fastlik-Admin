@@ -88,6 +88,7 @@ import {
   type AdminCardTransaction,
   type AdminCardTransactionFeed,
 } from './cardTransactionContract'
+import { TreasuryReconciliationWorkspace } from './TreasuryReconciliationWorkspace'
 
 type NavId =
   | 'overview'
@@ -318,7 +319,7 @@ function AuthenticatedAdmin({ session, onLogout }: { session: AdminSession; onLo
   }, [session.user.tenantId, token])
 
   const load = useCallback(async () => {
-    if (!tenantId || unavailable[active] || ['cardcenter', 'cardhistory', 'operations', 'permissions', 'subsystems'].includes(active)) {
+    if (!tenantId || unavailable[active] || ['cardcenter', 'cardhistory', 'operations', 'permissions', 'subsystems', 'funds'].includes(active)) {
       setSections([])
       setError('')
       return
@@ -337,12 +338,6 @@ function AuthenticatedAdmin({ session, onLogout }: { session: AdminSession; onLo
         ])
       } else if (active === 'tenants') {
         next = [{ title: '租户与合作方', description: '来自 GET /admin/tenants', value: tenants }]
-      } else if (active === 'funds') {
-        next = await Promise.all([
-          settledSection('Treasury', 'Reserve, available balance, hold and pending settlement', productionApi.treasury(DEFAULT_API, token, tenantId, source)),
-          settledSection('Settlement Dashboard', 'Live settlement workload', productionApi.settlementDashboard(DEFAULT_API, token, tenantId, source)),
-          settledSection('Reconciliation', 'Internal and external reconciliation status', productionApi.reconciliation(DEFAULT_API, token, tenantId, source)),
-        ])
       } else if (active === 'dashboards') {
         next = await Promise.all([
           settledSection('Treasury Dashboard', 'Railway live business table', productionApi.treasury(DEFAULT_API, token, tenantId, source)),
@@ -431,7 +426,8 @@ function AuthenticatedAdmin({ session, onLogout }: { session: AdminSession; onLo
           {active === 'cardcenter' && <CardWorkspace session={session} tenantId={tenantId} mode="card" />}
           {active === 'cardhistory' && <CardWorkspace session={session} tenantId={tenantId} mode="history" />}
           {active === 'operations' && <OperationsWorkspace session={session} tenantId={tenantId} />}
-          {!unavailable[active] && !['subsystems', 'permissions', 'cardcenter', 'cardhistory', 'operations'].includes(active) && (
+          {active === 'funds' && <TreasuryReconciliationWorkspace session={session} tenantId={tenantId} />}
+          {!unavailable[active] && !['subsystems', 'permissions', 'cardcenter', 'cardhistory', 'operations', 'funds'].includes(active) && (
             <>
               <PageHeading title={current.label} tenant={selectedTenant?.brandName || tenantId} source={source} busy={busy} refresh={() => void load()} />
               {busy && !sections.length ? <Loading /> : sections.map((section) => <DataCard key={section.title} section={section} query={query} />)}
