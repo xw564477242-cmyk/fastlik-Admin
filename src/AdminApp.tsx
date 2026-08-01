@@ -56,7 +56,10 @@ import {
   invalidateRequests,
   syncRequestScope,
 } from './requestGeneration'
-import type { AdminCardTransactionQuery } from './adminRoutes'
+import {
+  ADMIN_CARD_TRANSACTION_STATUS_BY_TYPE,
+  type AdminCardTransactionQuery,
+} from './adminRoutes'
 import {
   cardWorkspaceBaseScope,
   cardWorkspaceRequestScope,
@@ -70,6 +73,7 @@ import {
 } from './cardWorkspaceContract'
 import {
   ADMIN_CARD_TRANSACTION_STATUSES,
+  ADMIN_CARD_TRANSACTION_TYPES,
   appendAdminCardTransactionPage,
   cardTransactionCollectionScope,
   cardTransactionRequestScope,
@@ -490,6 +494,7 @@ function CardTransactionsPanel({ feed, busy, next }: { feed: AdminCardTransactio
   const rows = feed.transactions.map((transaction) => ({
     id: transaction.id,
     status: transaction.status,
+    type: transaction.type,
     amountMinor: transaction.amountMinor,
     currency: transaction.currency,
     merchantName: transaction.merchantName,
@@ -563,7 +568,7 @@ function CardWorkspace({ session, tenantId, mode }: { session: AdminSession; ten
       if (action === 'unfreeze') value = await productionApi.unfreezeCard(DEFAULT_API, session.accessToken, tenantId, id)
       if (acceptsMountedResponse(mounted.current, requestGate.current, ticket, requestScope)) {
         if (action === 'transactions') {
-          const page = parseAdminCardTransactionPage(value, id, transactionQuery.limit)
+          const page = parseAdminCardTransactionPage(value, transactionQuery.limit)
           setTransactionFeed(appendAdminCardTransactionPage(previousFeed, page, cursor, transactionScope))
           setTransactionsLoaded(true)
         } else {
@@ -615,11 +620,25 @@ function CardWorkspace({ session, tenantId, mode }: { session: AdminSession; ten
     setError('')
     setBusy('')
   }
+  const changeTransactionStatus = (status: AdminCardTransactionQuery['status']) => {
+    const type = transactionQuery.type
+    changeTransactionQuery({
+      status,
+      ...(status && type && ADMIN_CARD_TRANSACTION_STATUS_BY_TYPE[type] !== status ? { type: undefined } : {}),
+    })
+  }
+  const changeTransactionType = (type: AdminCardTransactionQuery['type']) => {
+    const status = transactionQuery.status
+    changeTransactionQuery({
+      type,
+      ...(type && status && ADMIN_CARD_TRANSACTION_STATUS_BY_TYPE[type] !== status ? { status: undefined } : {}),
+    })
+  }
   const description = display.view?.truncated
     ? 'Data Source: Railway Backend · 显示最近 200 条公开事件'
     : 'Data Source: Railway Backend · 仅显示 Admin 公开字段'
   const hasTransactionResults = visibleTransactionFeed.transactions.length > 0
-  return <><PageHeading title={mode === 'card' ? 'Card Center' : 'Card History'} tenant={tenantId} source={source} busy={Boolean(display.busy)} refresh={() => { if (scopeIsCurrent) void run(mode === 'card' ? 'read' : 'history') }} /><section className="lookup-panel"><div><span>REAL CARD ID REQUIRED</span><h3>{mode === 'card' ? '卡片查询与生命周期控制' : '卡片生命周期审计'}</h3><p>必须输入真实 Card ID；切换管理员会话、租户、环境、页面或 Card ID 会立即清除旧响应。</p></div><form onSubmit={(event) => { event.preventDefault(); if (scopeIsCurrent) void run(mode === 'card' ? 'read' : 'history') }}><input value={display.cardId} disabled={!scopeIsCurrent} onChange={(event) => changeCardId(event.target.value)} placeholder="输入 Railway 数据库中的 Card ID" /><button disabled={!scopeIsCurrent || Boolean(display.busy)}><Search />查询</button></form>{mode === 'card' && <><div className="action-row"><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('balance')}>读取余额</button><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('freeze')}>Freeze</button><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('unfreeze')}>Unfreeze</button></div><div className="card-transaction-filters"><label>状态<select value={transactionQuery.status ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ status: event.target.value ? event.target.value as AdminCardTransactionQuery['status'] : undefined })}><option value="">全部</option>{ADMIN_CARD_TRANSACTION_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select></label><label>币种<input maxLength={3} value={transactionQuery.currency ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ currency: event.target.value.toUpperCase() || undefined })} placeholder="USD" /></label><label>开始日期<input type="date" value={transactionQuery.from ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ from: event.target.value || undefined })} /></label><label>结束日期<input type="date" value={transactionQuery.to ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ to: event.target.value || undefined })} /></label><label>每页<select value={transactionQuery.limit} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ limit: Number(event.target.value) })}><option value={10}>10</option><option value={25}>25</option></select></label><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('transactions')}>读取交易</button></div></>}</section>{display.error && <div className="inline-error page-error"><AlertTriangle />{display.error}</div>}{display.view?.empty && <section className="empty-state"><Search /><h3>NO CARD EVENTS</h3><p>当前 Card 没有可显示的公开生命周期事件。</p></section>}{display.view && !display.view.empty && (display.view.kind === 'TIMELINE' ? <DataCard section={{ title: 'Lifecycle Timeline', description, value: display.view.value }} query="" /> : <CardReadOnlyPanel view={display.view} description={description} />)}{mode === 'card' && hasTransactionResults && <CardTransactionsPanel feed={visibleTransactionFeed} busy={Boolean(display.busy)} next={() => { if (visibleTransactionFeed.nextCursor) void run('transactions', visibleTransactionFeed.nextCursor) }} />}{mode === 'card' && transactionsLoaded && !hasTransactionResults && visibleTransactionFeed.scope === collectionScope && display.busy !== 'transactions' && transactionFeed.scope === collectionScope && <section className="empty-state card-transaction-empty"><Search /><h3>NO CARD TRANSACTIONS</h3><p>当前筛选条件下没有可显示的公开交易。</p></section>}</>
+  return <><PageHeading title={mode === 'card' ? 'Card Center' : 'Card History'} tenant={tenantId} source={source} busy={Boolean(display.busy)} refresh={() => { if (scopeIsCurrent) void run(mode === 'card' ? 'read' : 'history') }} /><section className="lookup-panel"><div><span>REAL CARD ID REQUIRED</span><h3>{mode === 'card' ? '卡片查询与生命周期控制' : '卡片生命周期审计'}</h3><p>必须输入真实 Card ID；切换管理员会话、租户、环境、页面或 Card ID 会立即清除旧响应。</p></div><form onSubmit={(event) => { event.preventDefault(); if (scopeIsCurrent) void run(mode === 'card' ? 'read' : 'history') }}><input value={display.cardId} disabled={!scopeIsCurrent} onChange={(event) => changeCardId(event.target.value)} placeholder="输入 Railway 数据库中的 Card ID" /><button disabled={!scopeIsCurrent || Boolean(display.busy)}><Search />查询</button></form>{mode === 'card' && <><div className="action-row"><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('balance')}>读取余额</button><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('freeze')}>Freeze</button><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('unfreeze')}>Unfreeze</button></div><div className="card-transaction-filters"><label>状态<select value={transactionQuery.status ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionStatus(event.target.value ? event.target.value as AdminCardTransactionQuery['status'] : undefined)}><option value="">全部</option>{ADMIN_CARD_TRANSACTION_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select></label><label>类型<select value={transactionQuery.type ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionType(event.target.value ? event.target.value as AdminCardTransactionQuery['type'] : undefined)}><option value="">全部</option>{ADMIN_CARD_TRANSACTION_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select></label><label>币种<input maxLength={3} value={transactionQuery.currency ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ currency: event.target.value.toUpperCase() || undefined })} placeholder="USD" /></label><label>开始日期<input type="date" value={transactionQuery.from ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ from: event.target.value || undefined })} /></label><label>结束日期<input type="date" value={transactionQuery.to ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ to: event.target.value || undefined })} /></label><label>每页<select value={transactionQuery.limit} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ limit: Number(event.target.value) })}><option value={10}>10</option><option value={25}>25</option></select></label><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('transactions')}>读取交易</button></div></>}</section>{display.error && <div className="inline-error page-error"><AlertTriangle />{display.error}</div>}{display.view?.empty && <section className="empty-state"><Search /><h3>NO CARD EVENTS</h3><p>当前 Card 没有可显示的公开生命周期事件。</p></section>}{display.view && !display.view.empty && (display.view.kind === 'TIMELINE' ? <DataCard section={{ title: 'Lifecycle Timeline', description, value: display.view.value }} query="" /> : <CardReadOnlyPanel view={display.view} description={description} />)}{mode === 'card' && hasTransactionResults && <CardTransactionsPanel feed={visibleTransactionFeed} busy={Boolean(display.busy)} next={() => { if (visibleTransactionFeed.nextCursor) void run('transactions', visibleTransactionFeed.nextCursor) }} />}{mode === 'card' && transactionsLoaded && !hasTransactionResults && visibleTransactionFeed.scope === collectionScope && display.busy !== 'transactions' && transactionFeed.scope === collectionScope && <section className="empty-state card-transaction-empty"><Search /><h3>NO CARD TRANSACTIONS</h3><p>当前筛选条件下没有可显示的公开交易。</p></section>}</>
 }
 
 function OperationsWorkspace({ session, tenantId }: { session: AdminSession; tenantId: string }) {

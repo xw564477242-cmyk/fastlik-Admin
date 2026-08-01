@@ -1,24 +1,25 @@
-import type { AdminCardTransactionQuery, DataSource } from './adminRoutes'
+import {
+  ADMIN_CARD_TRANSACTION_STATUSES,
+  ADMIN_CARD_TRANSACTION_STATUS_BY_TYPE,
+  ADMIN_CARD_TRANSACTION_TYPES,
+  MAX_ADMIN_CARD_TRANSACTION_CURSOR_LENGTH,
+  type AdminCardTransactionQuery,
+  type AdminCardTransactionStatus,
+  type AdminCardTransactionType,
+  type DataSource,
+} from './adminRoutes.ts'
+
+export { ADMIN_CARD_TRANSACTION_STATUSES, ADMIN_CARD_TRANSACTION_TYPES } from './adminRoutes.ts'
 
 export const MAX_ADMIN_CARD_TRANSACTION_PAGE_SIZE = 25
 export const MAX_ADMIN_CARD_TRANSACTION_HISTORY_ITEMS = 500
 export const MAX_CARD_TRANSACTION_JSON_BYTES = 262_144
 export const MAX_CARD_TRANSACTION_JSON_DEPTH = 16
 
-export const ADMIN_CARD_TRANSACTION_STATUSES = [
-  'AUTHORIZED',
-  'CLEARED',
-  'SETTLED',
-  'DECLINED',
-  'REVERSED',
-  'REFUNDED',
-] as const
-
-export type AdminCardTransactionStatus = (typeof ADMIN_CARD_TRANSACTION_STATUSES)[number]
-
 export type AdminCardTransaction = Readonly<{
   id: string
   status: AdminCardTransactionStatus
+  type: AdminCardTransactionType
   amountMinor: string
   authorizedAmountMinor: string
   clearedAmountMinor: string
@@ -29,8 +30,6 @@ export type AdminCardTransaction = Readonly<{
   merchantName: string | null
   merchantCategory: string | null
   occurredAt: string
-  createdAt: string
-  updatedAt: string
 }>
 
 export type AdminCardTransactionPage = Readonly<{
@@ -49,7 +48,6 @@ export type AdminCardTransactionFeed = Readonly<{
 type ContractCode =
   | 'INVALID_TRANSACTION_PAGE'
   | 'INVALID_TRANSACTION'
-  | 'CARD_ID_MISMATCH'
   | 'PAGE_SIZE_EXCEEDED'
   | 'DUPLICATE_TRANSACTION_ID'
   | 'CURSOR_LOOP'
@@ -65,7 +63,6 @@ export class CardTransactionContractError extends Error {
     super({
       INVALID_TRANSACTION_PAGE: 'Card transaction response could not be verified',
       INVALID_TRANSACTION: 'Card transaction could not be verified',
-      CARD_ID_MISMATCH: 'Card transaction does not match the requested Card ID',
       PAGE_SIZE_EXCEEDED: 'Card transaction page exceeds the allowed size',
       DUPLICATE_TRANSACTION_ID: 'Card transaction pagination returned a duplicate transaction',
       CURSOR_LOOP: 'Card transaction pagination returned a cursor loop',
@@ -165,11 +162,13 @@ const nullableText = (source: OwnData, key: string, maxBytes: number): string | 
   return text(source, key, maxBytes, 'INVALID_TRANSACTION')
 }
 
-const publicTransaction = (value: unknown, expectedCardId: string): AdminCardTransaction => {
+const publicTransaction = (value: unknown): AdminCardTransaction => {
   const source = ownData(value, 'INVALID_TRANSACTION')
-  if (identifier(source, 'cardId', 'INVALID_TRANSACTION') !== expectedCardId) invalid('CARD_ID_MISMATCH')
   const status = text(source, 'status', 32, 'INVALID_TRANSACTION')
   if (!(ADMIN_CARD_TRANSACTION_STATUSES as readonly string[]).includes(status)) invalid('INVALID_TRANSACTION')
+  const type = text(source, 'type', 32, 'INVALID_TRANSACTION')
+  if (!(ADMIN_CARD_TRANSACTION_TYPES as readonly string[]).includes(type)) invalid('INVALID_TRANSACTION')
+  if (ADMIN_CARD_TRANSACTION_STATUS_BY_TYPE[type as AdminCardTransactionType] !== status) invalid('INVALID_TRANSACTION')
   const currency = text(source, 'currency', 3, 'INVALID_TRANSACTION')
   if (!/^[A-Z]{3}$/.test(currency)) invalid('INVALID_TRANSACTION')
   const merchantCategory = nullableText(source, 'merchantCategory', 4)
@@ -177,6 +176,7 @@ const publicTransaction = (value: unknown, expectedCardId: string): AdminCardTra
   return Object.freeze({
     id: identifier(source, 'id', 'INVALID_TRANSACTION'),
     status: status as AdminCardTransactionStatus,
+    type: type as AdminCardTransactionType,
     amountMinor: minorUnits(source, 'amountMinor'),
     authorizedAmountMinor: minorUnits(source, 'authorizedAmountMinor'),
     clearedAmountMinor: minorUnits(source, 'clearedAmountMinor'),
@@ -187,14 +187,17 @@ const publicTransaction = (value: unknown, expectedCardId: string): AdminCardTra
     merchantName: nullableText(source, 'merchantName', 200),
     merchantCategory,
     occurredAt: timestamp(source, 'occurredAt'),
-    createdAt: timestamp(source, 'createdAt'),
-    updatedAt: timestamp(source, 'updatedAt'),
   })
 }
 
 const nextCursor = (value: unknown): string | null => {
   if (value === null) return null
-  if (typeof value !== 'string' || value.length > 128 || !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value)) {
+  if (
+    typeof value !== 'string'
+    || value.length === 0
+    || value.length > MAX_ADMIN_CARD_TRANSACTION_CURSOR_LENGTH
+    || !/^[A-Za-z0-9_-]+$/.test(value)
+  ) {
     invalid('INVALID_TRANSACTION_PAGE')
   }
   return value
@@ -215,7 +218,6 @@ export const createCardTransactionFeed = (scope: string): AdminCardTransactionFe
 
 export function parseAdminCardTransactionPage(
   wireValue: unknown,
-  expectedCardId: string,
   requestedLimit: number,
 ): AdminCardTransactionPage {
   if (!Number.isInteger(requestedLimit) || requestedLimit < 1 || requestedLimit > MAX_ADMIN_CARD_TRANSACTION_PAGE_SIZE) {
@@ -225,7 +227,7 @@ export function parseAdminCardTransactionPage(
   const rawTransactions = ownValue(source, 'data')
   if (!Array.isArray(rawTransactions)) invalid('INVALID_TRANSACTION_PAGE')
   if (rawTransactions.length > requestedLimit) invalid('PAGE_SIZE_EXCEEDED')
-  const transactions = rawTransactions.map((transaction) => publicTransaction(transaction, expectedCardId))
+  const transactions = rawTransactions.map((transaction) => publicTransaction(transaction))
   const ids = new Set<string>()
   for (let index = 0; index < transactions.length; index += 1) {
     if (ids.has(transactions[index].id)) invalid('DUPLICATE_TRANSACTION_ID')
@@ -283,6 +285,7 @@ export const cardTransactionCollectionScope = (
   cardId,
   'transactions',
   query.status ?? '',
+  query.type ?? '',
   query.currency ?? '',
   query.from ?? '',
   query.to ?? '',
