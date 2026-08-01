@@ -97,8 +97,10 @@ jobs:
             package-lock.json \
             src/AdminApp.tsx \
             src/requestGeneration.ts \
+            src/useScopedRequestLifecycle.ts \
             src/cardTransactionContract.ts \
             tests/cardTransactionMountedLifecycle.test.mjs \
+            tests/scopedRequestLifecycleMounted.test.mjs \
             scripts/write-card-transaction-evidence.mjs \
             scripts/verify-card-transaction-evidence.mjs \
             build-evidence.json \
@@ -115,8 +117,10 @@ jobs:
             package-lock.json
             src/AdminApp.tsx
             src/requestGeneration.ts
+            src/useScopedRequestLifecycle.ts
             src/cardTransactionContract.ts
             tests/cardTransactionMountedLifecycle.test.mjs
+            tests/scopedRequestLifecycleMounted.test.mjs
             scripts/write-card-transaction-evidence.mjs
             scripts/verify-card-transaction-evidence.mjs
             build-evidence.json

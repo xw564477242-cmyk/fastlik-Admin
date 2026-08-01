@@ -57,10 +57,12 @@ const start = (harness, scope) => {
 
 test('CardWorkspace render leaves an active list/detail request scope unchanged', () => {
   const source = readFileSync(new URL('../src/AdminApp.tsx', import.meta.url), 'utf8')
+  const lifecycle = readFileSync(new URL('../src/useScopedRequestLifecycle.ts', import.meta.url), 'utf8')
   const workspace = source.slice(source.indexOf('function CardWorkspace('), source.indexOf('function OperationsWorkspace('))
   const renderPrelude = workspace.slice(0, workspace.indexOf('const run = async'))
   assert.equal(renderPrelude.includes('syncRequestScope(requestGate.current, baseScope)'), false)
-  assert.match(workspace, /useEffect\(\(\) => \{\s*transitionRequestBaseScope\(requestGate\.current, transactionAbort, baseScope\)/)
+  assert.match(renderPrelude, /useScopedRequestLifecycle\(baseScope\)/)
+  assert.match(lifecycle, /useEffect\(\(\) => \{\s*transitionRequestBaseScope\(requestGate\.current, requestAbort, baseScope\)/)
 
   for (const scope of [listScope(), detailScope()]) {
     const harness = mountedHarness()

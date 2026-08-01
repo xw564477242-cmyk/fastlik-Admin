@@ -385,6 +385,7 @@ export function adminCardTransactionContractEvidence(sourceCommit: string) {
     activeCancellationRequired: true,
     selectionClearedOnFilterChange: true,
     mountedRequestLifecycle: Object.freeze({
+      reactRendererMounted: true,
       busyRenderPreservesActiveScope: true,
       baseScopeChangesEffectOnly: true,
       lateCompletionWrites: 0,

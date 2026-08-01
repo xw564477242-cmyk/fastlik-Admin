@@ -57,8 +57,8 @@ import {
   invalidateRequests,
   replaceRequestAbort,
   syncRequestScope,
-  transitionRequestBaseScope,
 } from './requestGeneration'
+import { useScopedRequestLifecycle } from './useScopedRequestLifecycle'
 import {
   ADMIN_CARD_TRANSACTION_STATUS_BY_TYPE,
   type AdminCardTransactionQuery,
@@ -542,11 +542,9 @@ function CardWorkspace({ session, tenantId, mode }: { session: AdminSession; ten
   const [transactionFeed, setTransactionFeed] = useState<AdminCardTransactionFeed>(() => createCardTransactionFeed(''))
   const [selectedTransaction, setSelectedTransaction] = useState<AdminCardTransaction | null>(null)
   const [transactionsLoaded, setTransactionsLoaded] = useState(false)
-  const mounted = useRef(false)
-  const transactionAbort = useRef<AbortController | null>(null)
   const source = session.user.environment as DataSource
   const baseScope = cardWorkspaceBaseScope(session.user.id, session.expiresAt, tenantId, source, mode)
-  const requestGate = useRef(createRequestGate(baseScope))
+  const { mounted, requestAbort: transactionAbort, requestGate } = useScopedRequestLifecycle(baseScope)
   const stateScope = useRef(baseScope)
   const display = visibleCardWorkspaceState(stateScope.current, baseScope, { cardId, view, busy, error })
   const scopeIsCurrent = stateScope.current === baseScope
@@ -638,16 +636,6 @@ function CardWorkspace({ session, tenantId, mode }: { session: AdminSession; ten
   }
 
   useEffect(() => {
-    mounted.current = true
-    return () => {
-      mounted.current = false
-      abortCurrentRequest(transactionAbort)
-      invalidateRequests(requestGate.current)
-    }
-  }, [])
-
-  useEffect(() => {
-    transitionRequestBaseScope(requestGate.current, transactionAbort, baseScope)
     stateScope.current = baseScope
     setCardId('')
     setView(null)

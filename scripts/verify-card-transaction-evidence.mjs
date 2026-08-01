@@ -15,6 +15,7 @@ assert.equal(actual.exactFieldsRequired, true)
 assert.equal(actual.activeCancellationRequired, true)
 assert.equal(actual.selectionClearedOnFilterChange, true)
 assert.deepEqual(actual.mountedRequestLifecycle, {
+  reactRendererMounted: true,
   busyRenderPreservesActiveScope: true,
   baseScopeChangesEffectOnly: true,
   lateCompletionWrites: 0,
