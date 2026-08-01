@@ -114,6 +114,12 @@ export const adminRoutes = {
     `/admin/tenants/${segment(tenantId)}`,
   readiness: (tenantId: string) =>
     `${adminRoutes.tenant(tenantId)}/integrations/readiness`,
+  treasuryReconciliation: (tenantId: string, environment: Extract<DataSource, 'SANDBOX' | 'TEST'>) =>
+    `${adminRoutes.tenant(tenantId)}/settlement/reconciliation?${environmentQuery(environment)}`,
+  treasuryTrialBalance: (tenantId: string, environment: Extract<DataSource, 'SANDBOX' | 'TEST'>) =>
+    `${adminRoutes.tenant(tenantId)}/settlement/trial-balance?${environmentQuery(environment)}`,
+  treasuryDailyClosing: (tenantId: string, environment: Extract<DataSource, 'SANDBOX' | 'TEST'>) =>
+    `${adminRoutes.tenant(tenantId)}/settlement/daily-closing?${environmentQuery(environment)}`,
   walletOperations: (tenantId: string, environment: DataSource) =>
     `${adminRoutes.tenant(tenantId)}/wallet/operations?${environmentQuery(environment)}&limit=100`,
   walletTransactions: (tenantId: string, environment: DataSource) =>
