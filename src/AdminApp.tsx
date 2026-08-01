@@ -226,7 +226,8 @@ export default function AdminApp() {
     setLoginBusy(true)
     setLoginError('')
     try {
-      await productionApi.health(DEFAULT_API)
+      // Login is the authoritative readiness check. Avoid a redundant database-backed
+      // health request immediately before authentication.
       const next = await productionApi.login(DEFAULT_API, tenantInput.trim(), email.trim(), password)
       if (next.user.environment !== runtimeConfig.environment) {
         await productionApi.logout(DEFAULT_API, next.accessToken)
