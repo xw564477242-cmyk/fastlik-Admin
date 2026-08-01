@@ -73,8 +73,11 @@ const readBoundedResponseText=async(response:Response,maxBytes:number):Promise<s
  return new TextDecoder('utf-8',{fatal:true}).decode(bytes)
 }
 
-export async function apiRequest<T>(path:string,token?:string,method='GET',body?:unknown,responsePolicy:ApiResponsePolicy=jsonResponsePolicy):Promise<T>{
+export async function apiRequest<T>(path:string,token?:string,method='GET',body?:unknown,responsePolicy:ApiResponsePolicy=jsonResponsePolicy,externalSignal?:AbortSignal):Promise<T>{
  const controller=new AbortController();const timeout=window.setTimeout(()=>controller.abort(),20_000);const trace=newTrace()
+ const abortFromCaller=()=>controller.abort()
+ if(externalSignal?.aborted)controller.abort()
+ else externalSignal?.addEventListener('abort',abortFromCaller,{once:true})
  try{
   const response=await fetch(`${DEFAULT_API}${path}`,{
    mode:'cors',credentials:'omit',cache:'no-store',signal:controller.signal,method,
@@ -96,10 +99,13 @@ export async function apiRequest<T>(path:string,token?:string,method='GET',body?
   return response.json() as Promise<T>
  }catch(error){
   if(error instanceof ApiError)throw error
-  if(error instanceof DOMException&&error.name==='AbortError')throw new ApiError(408,path,trace,`API timeout · HTTP 408 · Trace ${trace}`)
+  if(error instanceof DOMException&&error.name==='AbortError'){
+   if(externalSignal?.aborted)throw new ApiError(499,path,trace,`API request cancelled · HTTP 499 · Trace ${trace}`)
+   throw new ApiError(408,path,trace,`API timeout · HTTP 408 · Trace ${trace}`)
+  }
   const message=error instanceof Error?error.message:'Network failure'
   throw new ApiError(0,path,trace,`${message} · HTTP 0 · Trace ${trace}`)
- }finally{window.clearTimeout(timeout)}
+ }finally{window.clearTimeout(timeout);externalSignal?.removeEventListener('abort',abortFromCaller)}
 }
 
 async function health(path:string):Promise<Health>{
@@ -151,7 +157,8 @@ export const productionApi={
  card:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.card(tenantId,cardId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
  cardBalance:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.cardBalance(tenantId,cardId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
  cardTimeline:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.cardTimeline(tenantId,cardId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
- cardTransactions:(_base:string,key:string,tenantId:string,cardId:string,query:AdminCardTransactionQuery,cursor?:string)=>apiRequest<string>(adminRoutes.cardTransactions(tenantId,cardId,query,cursor),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_TRANSACTION_JSON_BYTES}),
+ cardTransactions:(_base:string,key:string,tenantId:string,cardId:string,query:AdminCardTransactionQuery,cursor?:string,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.cardTransactions(tenantId,cardId,query,cursor),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_TRANSACTION_JSON_BYTES},signal),
+ cardTransaction:(_base:string,key:string,tenantId:string,cardId:string,transactionId:string,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.cardTransaction(tenantId,cardId,transactionId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_TRANSACTION_JSON_BYTES},signal),
  freezeCard:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.freezeCard(tenantId,cardId),key,'POST',{idempotencyKey:crypto.randomUUID()},{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
  unfreezeCard:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.unfreezeCard(tenantId,cardId),key,'POST',{idempotencyKey:crypto.randomUUID()},{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
  trace:(_base:string,key:string,tenantId:string,environment:DataSource,id:string)=>apiRequest<TraceReport>(`/admin/tenants/${tenantId}/operations/traces/${encodeURIComponent(id)}?${query(environment)}`,key),

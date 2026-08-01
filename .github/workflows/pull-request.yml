@@ -39,6 +39,10 @@ jobs:
         run: npm run build
       - name: Production and Dev Contract Tests
         run: npm test && npm run test:dev
+      - name: Verify Admin Card transaction evidence
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: npm run evidence:card-transactions
       - name: Repository Subpath Build
         env:
           VITE_FASTLINK_API_URL: https://fastlink-backend-dev-development-a.up.railway.app/api
@@ -87,7 +91,7 @@ jobs:
         run: |
           set -euo pipefail
           printf '{"format":"fastlink-admin-pr-evidence-v1","sourceCommit":"%s","environment":"NON_PRODUCTION"}\n' "$SOURCE_SHA" > build-evidence.json
-          sha256sum dist/index.html dist/runtime-config.js package-lock.json build-evidence.json > build-provenance.sha256
+          sha256sum dist/index.html dist/runtime-config.js package-lock.json build-evidence.json card-transaction-contract-evidence.json > build-provenance.sha256
           sha256sum --check build-provenance.sha256
 
       - name: Upload non-production build evidence
@@ -98,6 +102,7 @@ jobs:
             dist/
             package-lock.json
             build-evidence.json
+            card-transaction-contract-evidence.json
             build-provenance.sha256
           if-no-files-found: error
           retention-days: 7

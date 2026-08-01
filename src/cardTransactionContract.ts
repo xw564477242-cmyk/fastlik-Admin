@@ -1,20 +1,38 @@
 import {
   ADMIN_CARD_TRANSACTION_STATUSES,
+  ADMIN_CARD_TRANSACTION_STATUS_FILTERS,
   ADMIN_CARD_TRANSACTION_STATUS_BY_TYPE,
   ADMIN_CARD_TRANSACTION_TYPES,
   MAX_ADMIN_CARD_TRANSACTION_CURSOR_LENGTH,
+  isCanonicalSignedAdminCardTransactionCursor,
   type AdminCardTransactionQuery,
   type AdminCardTransactionStatus,
   type AdminCardTransactionType,
   type DataSource,
 } from './adminRoutes.ts'
 
-export { ADMIN_CARD_TRANSACTION_STATUSES, ADMIN_CARD_TRANSACTION_TYPES } from './adminRoutes.ts'
+export { ADMIN_CARD_TRANSACTION_STATUSES, ADMIN_CARD_TRANSACTION_STATUS_FILTERS, ADMIN_CARD_TRANSACTION_TYPES } from './adminRoutes.ts'
 
 export const MAX_ADMIN_CARD_TRANSACTION_PAGE_SIZE = 25
 export const MAX_ADMIN_CARD_TRANSACTION_HISTORY_ITEMS = 500
 export const MAX_CARD_TRANSACTION_JSON_BYTES = 262_144
 export const MAX_CARD_TRANSACTION_JSON_DEPTH = 16
+export const ADMIN_CARD_TRANSACTION_PUBLIC_FIELDS = Object.freeze([
+  'id',
+  'status',
+  'type',
+  'amountMinor',
+  'authorizedAmountMinor',
+  'clearedAmountMinor',
+  'settledAmountMinor',
+  'reversedAmountMinor',
+  'refundedAmountMinor',
+  'currency',
+  'merchantName',
+  'merchantCategory',
+  'occurredAt',
+] as const)
+const ADMIN_CARD_TRANSACTION_PAGE_FIELDS = Object.freeze(['data', 'nextCursor'] as const)
 
 export type AdminCardTransaction = Readonly<{
   id: string
@@ -102,15 +120,15 @@ const jsonDepthWithinLimit = (raw: string): boolean => {
   return !inString && !escaped && depth === 0
 }
 
-const boundedJson = (wireValue: unknown): unknown => {
-  if (typeof wireValue !== 'string' || wireValue.length === 0) invalid('INVALID_TRANSACTION_PAGE')
-  if (wireValue.length > MAX_CARD_TRANSACTION_JSON_BYTES) invalid('INVALID_TRANSACTION_PAGE')
-  if (new TextEncoder().encode(wireValue).byteLength > MAX_CARD_TRANSACTION_JSON_BYTES) invalid('INVALID_TRANSACTION_PAGE')
-  if (!jsonDepthWithinLimit(wireValue)) invalid('INVALID_TRANSACTION_PAGE')
+const boundedJson = (wireValue: unknown, code: ContractCode): unknown => {
+  if (typeof wireValue !== 'string' || wireValue.length === 0) invalid(code)
+  if (wireValue.length > MAX_CARD_TRANSACTION_JSON_BYTES) invalid(code)
+  if (new TextEncoder().encode(wireValue).byteLength > MAX_CARD_TRANSACTION_JSON_BYTES) invalid(code)
+  if (!jsonDepthWithinLimit(wireValue)) invalid(code)
   try {
     return JSON.parse(wireValue) as unknown
   } catch {
-    return invalid('INVALID_TRANSACTION_PAGE')
+    return invalid(code)
   }
 }
 
@@ -121,6 +139,13 @@ const ownData = (value: unknown, code: ContractCode): OwnData => {
 }
 
 const ownValue = (source: OwnData, key: string): unknown => source[key]?.value
+
+const exactFields = (source: OwnData, fields: readonly string[], code: ContractCode): void => {
+  const keys = Object.keys(source).sort()
+  const expected = [...fields].sort()
+  if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) invalid(code)
+  if (keys.some((key) => !('value' in source[key]))) invalid(code)
+}
 
 const text = (source: OwnData, key: string, maxBytes: number, code: ContractCode): string => {
   const value = ownValue(source, key)
@@ -136,7 +161,7 @@ const text = (source: OwnData, key: string, maxBytes: number, code: ContractCode
 
 const identifier = (source: OwnData, key: string, code: ContractCode): string => {
   const value = text(source, key, 128, code)
-  return /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value) ? value : invalid(code)
+  return /^[A-Za-z0-9_-]{2,128}$/.test(value) ? value : invalid(code)
 }
 
 const minorUnits = (source: OwnData, key: string): string => {
@@ -162,18 +187,22 @@ const nullableText = (source: OwnData, key: string, maxBytes: number): string | 
   return text(source, key, maxBytes, 'INVALID_TRANSACTION')
 }
 
-const publicTransaction = (value: unknown): AdminCardTransaction => {
+const publicTransaction = (value: unknown, query: AdminCardTransactionQuery): AdminCardTransaction => {
   const source = ownData(value, 'INVALID_TRANSACTION')
+  exactFields(source, ADMIN_CARD_TRANSACTION_PUBLIC_FIELDS, 'INVALID_TRANSACTION')
   const status = text(source, 'status', 32, 'INVALID_TRANSACTION')
   if (!(ADMIN_CARD_TRANSACTION_STATUSES as readonly string[]).includes(status)) invalid('INVALID_TRANSACTION')
   const type = text(source, 'type', 32, 'INVALID_TRANSACTION')
   if (!(ADMIN_CARD_TRANSACTION_TYPES as readonly string[]).includes(type)) invalid('INVALID_TRANSACTION')
   if (ADMIN_CARD_TRANSACTION_STATUS_BY_TYPE[type as AdminCardTransactionType] !== status) invalid('INVALID_TRANSACTION')
+  if (query.status !== 'ALL' && status !== query.status) invalid('INVALID_TRANSACTION')
+  if (query.type && type !== query.type) invalid('INVALID_TRANSACTION')
   const currency = text(source, 'currency', 3, 'INVALID_TRANSACTION')
   if (!/^[A-Z]{3}$/.test(currency)) invalid('INVALID_TRANSACTION')
+  if (query.currency && currency !== query.currency) invalid('INVALID_TRANSACTION')
   const merchantCategory = nullableText(source, 'merchantCategory', 4)
   if (merchantCategory !== null && !/^[0-9]{4}$/.test(merchantCategory)) invalid('INVALID_TRANSACTION')
-  return Object.freeze({
+  const transaction = Object.freeze({
     id: identifier(source, 'id', 'INVALID_TRANSACTION'),
     status: status as AdminCardTransactionStatus,
     type: type as AdminCardTransactionType,
@@ -188,6 +217,10 @@ const publicTransaction = (value: unknown): AdminCardTransaction => {
     merchantCategory,
     occurredAt: timestamp(source, 'occurredAt'),
   })
+  const occurredDate = transaction.occurredAt.slice(0, 10)
+  if (query.from && occurredDate < query.from) invalid('INVALID_TRANSACTION')
+  if (query.to && occurredDate > query.to) invalid('INVALID_TRANSACTION')
+  return transaction
 }
 
 const nextCursor = (value: unknown): string | null => {
@@ -196,7 +229,7 @@ const nextCursor = (value: unknown): string | null => {
     typeof value !== 'string'
     || value.length === 0
     || value.length > MAX_ADMIN_CARD_TRANSACTION_CURSOR_LENGTH
-    || !/^[A-Za-z0-9_-]+$/.test(value)
+    || !isCanonicalSignedAdminCardTransactionCursor(value)
   ) {
     invalid('INVALID_TRANSACTION_PAGE')
   }
@@ -218,16 +251,18 @@ export const createCardTransactionFeed = (scope: string): AdminCardTransactionFe
 
 export function parseAdminCardTransactionPage(
   wireValue: unknown,
-  requestedLimit: number,
+  query: AdminCardTransactionQuery,
 ): AdminCardTransactionPage {
+  const requestedLimit = query.limit
   if (!Number.isInteger(requestedLimit) || requestedLimit < 1 || requestedLimit > MAX_ADMIN_CARD_TRANSACTION_PAGE_SIZE) {
     invalid('PAGE_SIZE_EXCEEDED')
   }
-  const source = ownData(boundedJson(wireValue), 'INVALID_TRANSACTION_PAGE')
+  const source = ownData(boundedJson(wireValue, 'INVALID_TRANSACTION_PAGE'), 'INVALID_TRANSACTION_PAGE')
+  exactFields(source, ADMIN_CARD_TRANSACTION_PAGE_FIELDS, 'INVALID_TRANSACTION_PAGE')
   const rawTransactions = ownValue(source, 'data')
   if (!Array.isArray(rawTransactions)) invalid('INVALID_TRANSACTION_PAGE')
   if (rawTransactions.length > requestedLimit) invalid('PAGE_SIZE_EXCEEDED')
-  const transactions = rawTransactions.map((transaction) => publicTransaction(transaction))
+  const transactions = rawTransactions.map((transaction) => publicTransaction(transaction, query))
   const ids = new Set<string>()
   for (let index = 0; index < transactions.length; index += 1) {
     if (ids.has(transactions[index].id)) invalid('DUPLICATE_TRANSACTION_ID')
@@ -237,6 +272,16 @@ export function parseAdminCardTransactionPage(
   const cursor = nextCursor(ownValue(source, 'nextCursor'))
   if (transactions.length === 0 && cursor !== null) invalid('INVALID_TRANSACTION_PAGE')
   return Object.freeze({ transactions: Object.freeze(transactions), nextCursor: cursor })
+}
+
+export function parseAdminCardTransactionDetail(
+  wireValue: unknown,
+  requestedTransactionId: string,
+  query: AdminCardTransactionQuery,
+): AdminCardTransaction {
+  if (!/^[A-Za-z0-9_-]{2,128}$/.test(requestedTransactionId)) invalid('INVALID_TRANSACTION')
+  const transaction = publicTransaction(boundedJson(wireValue, 'INVALID_TRANSACTION'), query)
+  return transaction.id === requestedTransactionId ? transaction : invalid('TRANSACTION_SCOPE_MISMATCH')
 }
 
 export function appendAdminCardTransactionPage(
@@ -284,7 +329,7 @@ export const cardTransactionCollectionScope = (
   environment,
   cardId,
   'transactions',
-  query.status ?? '',
+  query.status,
   query.type ?? '',
   query.currency ?? '',
   query.from ?? '',
@@ -304,3 +349,40 @@ export const cardTransactionRequestScope = (
   cardTransactionCollectionScope(actorId, sessionExpiresAt, tenantId, environment, cardId, query),
   cursor,
 ])
+
+export const cardTransactionDetailScope = (
+  actorId: string,
+  sessionExpiresAt: string,
+  tenantId: string,
+  environment: DataSource,
+  cardId: string,
+  query: AdminCardTransactionQuery,
+  transactionId: string,
+): string => JSON.stringify([
+  cardTransactionCollectionScope(actorId, sessionExpiresAt, tenantId, environment, cardId, query),
+  'detail',
+  transactionId,
+])
+
+export function adminCardTransactionContractEvidence(sourceCommit: string) {
+  if (!/^[a-f0-9]{40}$/.test(sourceCommit)) throw new Error('SOURCE_SHA must be a lowercase 40-character commit SHA')
+  return Object.freeze({
+    format: 'fastlink-admin-card-transaction-contract-v1',
+    sourceCommit,
+    environment: 'NON_PRODUCTION',
+    runtimeEnvironments: Object.freeze(['SANDBOX', 'TEST']),
+    productionEnabled: false,
+    readOnlyMethods: Object.freeze(['GET']),
+    statusFilters: Object.freeze([...ADMIN_CARD_TRANSACTION_STATUS_FILTERS]),
+    allStatusEncoding: 'OMITTED',
+    cursor: Object.freeze({ format: 'SIGNED_V1_SCOPE_ID_MAC_BASE64URL', maximumLength: MAX_ADMIN_CARD_TRANSACTION_CURSOR_LENGTH }),
+    pageFields: Object.freeze([...ADMIN_CARD_TRANSACTION_PAGE_FIELDS]),
+    transactionFields: Object.freeze([...ADMIN_CARD_TRANSACTION_PUBLIC_FIELDS]),
+    exactFieldsRequired: true,
+    detailBoundToRequestedId: true,
+    collectionScopeBindings: Object.freeze(['actorId', 'sessionExpiresAt', 'tenantId', 'environment', 'cardId', 'status', 'type', 'currency', 'from', 'to', 'limit']),
+    requestGenerationBound: true,
+    activeCancellationRequired: true,
+    selectionClearedOnFilterChange: true,
+  })
+}
