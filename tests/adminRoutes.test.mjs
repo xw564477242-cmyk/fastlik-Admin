@@ -28,8 +28,33 @@ test('card lifecycle routes encode identifiers and cannot change endpoint shape'
   assert.equal(adminRoutes.card(tenantId, cardId), root)
   assert.equal(adminRoutes.cardBalance(tenantId, cardId), `${root}/balance`)
   assert.equal(adminRoutes.cardTimeline(tenantId, cardId), `${root}/timeline`)
+  assert.equal(
+    adminRoutes.cardTransactions(tenantId, cardId, {
+      status: 'SETTLED', type: 'SETTLEMENT', currency: 'USD', from: '2026-07-01', to: '2026-07-31', limit: 25,
+    }, 'cursor_2'),
+    `${root}/transactions?status=SETTLED&type=SETTLEMENT&currency=USD&from=2026-07-01&to=2026-07-31&limit=25&cursor=cursor_2`,
+  )
   assert.equal(adminRoutes.freezeCard(tenantId, cardId), `${root}/freeze`)
   assert.equal(adminRoutes.unfreezeCard(tenantId, cardId), `${root}/unfreeze`)
+})
+
+test('Card transaction route emits only Backend-supported filters and caps pages and cursors', () => {
+  assert.equal(
+    adminRoutes.cardTransactions('tenant-1', 'card-1', { limit: 10, provider: 'THREDD' }),
+    '/admin/tenants/tenant-1/cards/card-1/transactions?limit=10',
+  )
+  assert.equal(
+    adminRoutes.cardTransactions('tenant-1', 'card-1', { limit: 10, type: 'REFUND' }),
+    '/admin/tenants/tenant-1/cards/card-1/transactions?type=REFUND&limit=10',
+  )
+  assert.throws(() => adminRoutes.cardTransactions('tenant-1', 'card-1', { limit: 26 }), /between 1 and 25/)
+  assert.throws(() => adminRoutes.cardTransactions('tenant-1', 'card-1', { limit: 25, status: 'PENDING' }), /status is invalid/)
+  assert.throws(() => adminRoutes.cardTransactions('tenant-1', 'card-1', { limit: 25, type: 'PURCHASE' }), /type is invalid/)
+  assert.throws(() => adminRoutes.cardTransactions('tenant-1', 'card-1', { limit: 25, status: 'SETTLED', type: 'REFUND' }), /do not match/)
+  assert.throws(() => adminRoutes.cardTransactions('tenant-1', 'card-1', { limit: 25, currency: 'usd' }), /currency is invalid/)
+  assert.throws(() => adminRoutes.cardTransactions('tenant-1', 'card-1', { limit: 25, from: '2026-02-30' }), /date is invalid/)
+  assert.throws(() => adminRoutes.cardTransactions('tenant-1', 'card-1', { limit: 25 }, 'cursor?other=1'), /cursor is invalid/)
+  assert.throws(() => adminRoutes.cardTransactions('tenant-1', 'card-1', { limit: 25 }, 'a'.repeat(513)), /cursor is invalid/)
 })
 
 test('tenant readiness route uses the same encoded tenant boundary', () => {

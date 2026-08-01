@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  acceptsMountedResponse,
   acceptsResponse,
   beginRequest,
   createRequestGate,
@@ -38,6 +39,13 @@ test('explicit invalidation rejects in-flight responses', () => {
   invalidateRequests(gate)
 
   assert.equal(acceptsResponse(gate, ticket, gate.scope), false)
+})
+
+test('an unmounted workspace rejects an otherwise current late response', () => {
+  const gate = createRequestGate('tenant-a|TEST|transactions')
+  const ticket = beginRequest(gate, gate.scope)
+  assert.equal(acceptsMountedResponse(true, gate, ticket, gate.scope), true)
+  assert.equal(acceptsMountedResponse(false, gate, ticket, gate.scope), false)
 })
 
 test('an empty operation lookup clears busy and still rejects the in-flight response', () => {

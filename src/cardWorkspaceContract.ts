@@ -1,7 +1,8 @@
 import type { DataSource } from './adminRoutes'
 
 export type CardWorkspaceMode = 'card' | 'history'
-export type CardWorkspaceAction = 'read' | 'balance' | 'freeze' | 'unfreeze' | 'history'
+export type CardWorkspaceAction = 'read' | 'balance' | 'freeze' | 'unfreeze' | 'history' | 'transactions'
+export type CardWorkspaceResponseAction = Exclude<CardWorkspaceAction, 'transactions'>
 
 export type AdminCardType = 'VIRTUAL' | 'PHYSICAL'
 export type AdminCardStatus = 'PENDING' | 'ACTIVE' | 'FROZEN' | 'CLOSED' | 'FAILED'
@@ -248,7 +249,7 @@ export const cardWorkspaceRequestScope = (
 ): string => [cardWorkspaceBaseScope(actorId, sessionExpiresAt, tenantId, environment, mode), cardId, action].join('\u0000')
 
 export function parseCardWorkspaceResponse(
-  action: CardWorkspaceAction,
+  action: CardWorkspaceResponseAction,
   wireValue: unknown,
   expectedCardId: string,
 ): CardWorkspaceView {

@@ -49,12 +49,17 @@ import {
   type WalletOperationDetailState,
 } from './walletOperationDetail'
 import {
+  acceptsMountedResponse,
   acceptsResponse,
   beginRequest,
   createRequestGate,
   invalidateRequests,
   syncRequestScope,
 } from './requestGeneration'
+import {
+  ADMIN_CARD_TRANSACTION_STATUS_BY_TYPE,
+  type AdminCardTransactionQuery,
+} from './adminRoutes'
 import {
   cardWorkspaceBaseScope,
   cardWorkspaceRequestScope,
@@ -66,6 +71,17 @@ import {
   type CardWorkspaceAction,
   type CardWorkspaceView,
 } from './cardWorkspaceContract'
+import {
+  ADMIN_CARD_TRANSACTION_STATUSES,
+  ADMIN_CARD_TRANSACTION_TYPES,
+  appendAdminCardTransactionPage,
+  cardTransactionCollectionScope,
+  cardTransactionRequestScope,
+  CardTransactionContractError,
+  createCardTransactionFeed,
+  parseAdminCardTransactionPage,
+  type AdminCardTransactionFeed,
+} from './cardTransactionContract'
 
 type NavId =
   | 'overview'
@@ -172,6 +188,7 @@ function errorText(value: unknown): string {
 
 function cardWorkspaceErrorText(value: unknown): string {
   if (value instanceof CardWorkspaceContractError) return value.message
+  if (value instanceof CardTransactionContractError) return value.message
   if (value instanceof ApiError) {
     if (value.status === 401 || value.status === 403) return 'Admin session is not authorized for this Card request'
     if (value.status === 404) return 'Card was not found in the selected tenant'
@@ -473,6 +490,20 @@ function CardReadOnlyPanel({ view, description }: { view: Extract<CardWorkspaceV
   return <article className="panel card-contract-panel"><div className="panel-title"><div><h3>{view.kind === 'CARD' ? 'Card Detail' : 'Card Balance'}</h3><p>{description}</p></div><span className="record-count">TYPED CONTRACT</span></div>{view.kind === 'CARD' ? <><CardFields card={view.value} />{view.value.balance && <><h4>Balance snapshot</h4><BalanceFields balance={view.value.balance} /></>}</> : <BalanceFields balance={view.value} />}</article>
 }
 
+function CardTransactionsPanel({ feed, busy, next }: { feed: AdminCardTransactionFeed; busy: boolean; next: () => void }) {
+  const rows = feed.transactions.map((transaction) => ({
+    id: transaction.id,
+    status: transaction.status,
+    type: transaction.type,
+    amountMinor: transaction.amountMinor,
+    currency: transaction.currency,
+    merchantName: transaction.merchantName,
+    merchantCategory: transaction.merchantCategory,
+    occurredAt: transaction.occurredAt,
+  }))
+  return <section className="card-transaction-results"><DataCard section={{ title: 'Card Transactions', description: 'Data Source: Railway Backend · 仅显示独立公开字段合同', value: rows }} query="" />{feed.nextCursor && <button className="card-transaction-next" disabled={busy} onClick={next}>{busy ? '读取中…' : '下一页'}</button>}</section>
+}
+
 function Permissions({ session }: { session: AdminSession }) {
   const rows = [
     ...session.user.roles.map((role) => ({ type: 'ROLE', value: role, source: 'GET /admin/auth/me' })),
@@ -486,13 +517,23 @@ function CardWorkspace({ session, tenantId, mode }: { session: AdminSession; ten
   const [view, setView] = useState<CardWorkspaceView | null>(null)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
+  const [transactionQuery, setTransactionQuery] = useState<AdminCardTransactionQuery>({ limit: 25 })
+  const [transactionFeed, setTransactionFeed] = useState<AdminCardTransactionFeed>(() => createCardTransactionFeed(''))
+  const [transactionsLoaded, setTransactionsLoaded] = useState(false)
+  const mounted = useRef(false)
   const source = session.user.environment as DataSource
   const baseScope = cardWorkspaceBaseScope(session.user.id, session.expiresAt, tenantId, source, mode)
   const requestGate = useRef(createRequestGate(baseScope))
+  syncRequestScope(requestGate.current, baseScope)
   const stateScope = useRef(baseScope)
   const display = visibleCardWorkspaceState(stateScope.current, baseScope, { cardId, view, busy, error })
   const scopeIsCurrent = stateScope.current === baseScope
-  const run = async (action: CardWorkspaceAction) => {
+  const collectionScope = cardTransactionCollectionScope(session.user.id, session.expiresAt, tenantId, source, display.cardId.trim(), transactionQuery)
+  const visibleTransactionFeed = transactionFeed.scope === collectionScope
+    ? transactionFeed
+    : createCardTransactionFeed(collectionScope)
+
+  const run = async (action: CardWorkspaceAction, cursor: string | null = null) => {
     if (!scopeIsCurrent) return
     const id = cardId.trim()
     if (!id) {
@@ -500,49 +541,104 @@ function CardWorkspace({ session, tenantId, mode }: { session: AdminSession; ten
       setBusy('')
       setError('请输入真实 Card ID')
       setView(null)
+      setTransactionFeed(createCardTransactionFeed(collectionScope))
+      setTransactionsLoaded(false)
       return
     }
-    const requestScope = cardWorkspaceRequestScope(session.user.id, session.expiresAt, tenantId, source, mode, id, action)
+    const transactionScope = cardTransactionCollectionScope(session.user.id, session.expiresAt, tenantId, source, id, transactionQuery)
+    const requestScope = action === 'transactions'
+      ? cardTransactionRequestScope(session.user.id, session.expiresAt, tenantId, source, id, transactionQuery, cursor)
+      : cardWorkspaceRequestScope(session.user.id, session.expiresAt, tenantId, source, mode, id, action)
     const ticket = beginRequest(requestGate.current, requestScope)
+    const previousFeed = cursor === null ? createCardTransactionFeed(transactionScope) : visibleTransactionFeed
     setBusy(action)
     setError('')
     setView(null)
+    if (action === 'transactions' && cursor === null) {
+      setTransactionFeed(previousFeed)
+      setTransactionsLoaded(false)
+    }
     try {
       let value: unknown
       if (action === 'read') value = await productionApi.card(DEFAULT_API, session.accessToken, tenantId, id)
       if (action === 'balance') value = await productionApi.cardBalance(DEFAULT_API, session.accessToken, tenantId, id)
       if (action === 'history') value = await productionApi.cardTimeline(DEFAULT_API, session.accessToken, tenantId, id)
+      if (action === 'transactions') value = await productionApi.cardTransactions(DEFAULT_API, session.accessToken, tenantId, id, transactionQuery, cursor ?? undefined)
       if (action === 'freeze') value = await productionApi.freezeCard(DEFAULT_API, session.accessToken, tenantId, id)
       if (action === 'unfreeze') value = await productionApi.unfreezeCard(DEFAULT_API, session.accessToken, tenantId, id)
-      if (acceptsResponse(requestGate.current, ticket, requestScope)) {
-        setView(parseCardWorkspaceResponse(action, value, id))
+      if (acceptsMountedResponse(mounted.current, requestGate.current, ticket, requestScope)) {
+        if (action === 'transactions') {
+          const page = parseAdminCardTransactionPage(value, transactionQuery.limit)
+          setTransactionFeed(appendAdminCardTransactionPage(previousFeed, page, cursor, transactionScope))
+          setTransactionsLoaded(true)
+        } else {
+          setView(parseCardWorkspaceResponse(action, value, id))
+        }
       }
     } catch (error) {
-      if (acceptsResponse(requestGate.current, ticket, requestScope)) setError(cardWorkspaceErrorText(error))
+      if (acceptsMountedResponse(mounted.current, requestGate.current, ticket, requestScope)) setError(cardWorkspaceErrorText(error))
     } finally {
-      if (acceptsResponse(requestGate.current, ticket, requestScope)) setBusy('')
+      if (acceptsMountedResponse(mounted.current, requestGate.current, ticket, requestScope)) setBusy('')
     }
   }
+
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      invalidateRequests(requestGate.current)
+    }
+  }, [])
+
   useEffect(() => {
     syncRequestScope(requestGate.current, baseScope)
     invalidateRequests(requestGate.current)
     stateScope.current = baseScope
     setCardId('')
     setView(null)
+    setTransactionFeed(createCardTransactionFeed(cardTransactionCollectionScope(session.user.id, session.expiresAt, tenantId, source, '', transactionQuery)))
+    setTransactionsLoaded(false)
     setError('')
     setBusy('')
   }, [baseScope])
+
   const changeCardId = (next: string) => {
     invalidateRequests(requestGate.current)
     setCardId(next)
     setView(null)
+    setTransactionFeed(createCardTransactionFeed(cardTransactionCollectionScope(session.user.id, session.expiresAt, tenantId, source, next.trim(), transactionQuery)))
+    setTransactionsLoaded(false)
     setError('')
     setBusy('')
+  }
+  const changeTransactionQuery = (patch: Partial<AdminCardTransactionQuery>) => {
+    const next = { ...transactionQuery, ...patch }
+    invalidateRequests(requestGate.current)
+    setTransactionQuery(next)
+    setTransactionFeed(createCardTransactionFeed(cardTransactionCollectionScope(session.user.id, session.expiresAt, tenantId, source, cardId.trim(), next)))
+    setTransactionsLoaded(false)
+    setError('')
+    setBusy('')
+  }
+  const changeTransactionStatus = (status: AdminCardTransactionQuery['status']) => {
+    const type = transactionQuery.type
+    changeTransactionQuery({
+      status,
+      ...(status && type && ADMIN_CARD_TRANSACTION_STATUS_BY_TYPE[type] !== status ? { type: undefined } : {}),
+    })
+  }
+  const changeTransactionType = (type: AdminCardTransactionQuery['type']) => {
+    const status = transactionQuery.status
+    changeTransactionQuery({
+      type,
+      ...(type && status && ADMIN_CARD_TRANSACTION_STATUS_BY_TYPE[type] !== status ? { status: undefined } : {}),
+    })
   }
   const description = display.view?.truncated
     ? 'Data Source: Railway Backend · 显示最近 200 条公开事件'
     : 'Data Source: Railway Backend · 仅显示 Admin 公开字段'
-  return <><PageHeading title={mode === 'card' ? 'Card Center' : 'Card History'} tenant={tenantId} source={source} busy={Boolean(display.busy)} refresh={() => { if (scopeIsCurrent) void run(mode === 'card' ? 'read' : 'history') }} /><section className="lookup-panel"><div><span>REAL CARD ID REQUIRED</span><h3>{mode === 'card' ? '卡片查询与生命周期控制' : '卡片生命周期审计'}</h3><p>必须输入真实 Card ID；切换管理员会话、租户、环境、页面或 Card ID 会立即清除旧响应。</p></div><form onSubmit={(event) => { event.preventDefault(); if (scopeIsCurrent) void run(mode === 'card' ? 'read' : 'history') }}><input value={display.cardId} disabled={!scopeIsCurrent} onChange={(event) => changeCardId(event.target.value)} placeholder="输入 Railway 数据库中的 Card ID" /><button disabled={!scopeIsCurrent || Boolean(display.busy)}><Search />查询</button></form>{mode === 'card' && <div className="action-row"><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('balance')}>读取余额</button><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('freeze')}>Freeze</button><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('unfreeze')}>Unfreeze</button></div>}</section>{display.error && <div className="inline-error page-error"><AlertTriangle />{display.error}</div>}{display.view?.empty && <section className="empty-state"><Search /><h3>NO CARD EVENTS</h3><p>当前 Card 没有可显示的公开生命周期事件。</p></section>}{display.view && !display.view.empty && (display.view.kind === 'TIMELINE' ? <DataCard section={{ title: 'Lifecycle Timeline', description, value: display.view.value }} query="" /> : <CardReadOnlyPanel view={display.view} description={description} />)}</>
+  const hasTransactionResults = visibleTransactionFeed.transactions.length > 0
+  return <><PageHeading title={mode === 'card' ? 'Card Center' : 'Card History'} tenant={tenantId} source={source} busy={Boolean(display.busy)} refresh={() => { if (scopeIsCurrent) void run(mode === 'card' ? 'read' : 'history') }} /><section className="lookup-panel"><div><span>REAL CARD ID REQUIRED</span><h3>{mode === 'card' ? '卡片查询与生命周期控制' : '卡片生命周期审计'}</h3><p>必须输入真实 Card ID；切换管理员会话、租户、环境、页面或 Card ID 会立即清除旧响应。</p></div><form onSubmit={(event) => { event.preventDefault(); if (scopeIsCurrent) void run(mode === 'card' ? 'read' : 'history') }}><input value={display.cardId} disabled={!scopeIsCurrent} onChange={(event) => changeCardId(event.target.value)} placeholder="输入 Railway 数据库中的 Card ID" /><button disabled={!scopeIsCurrent || Boolean(display.busy)}><Search />查询</button></form>{mode === 'card' && <><div className="action-row"><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('balance')}>读取余额</button><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('freeze')}>Freeze</button><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('unfreeze')}>Unfreeze</button></div><div className="card-transaction-filters"><label>状态<select value={transactionQuery.status ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionStatus(event.target.value ? event.target.value as AdminCardTransactionQuery['status'] : undefined)}><option value="">全部</option>{ADMIN_CARD_TRANSACTION_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select></label><label>类型<select value={transactionQuery.type ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionType(event.target.value ? event.target.value as AdminCardTransactionQuery['type'] : undefined)}><option value="">全部</option>{ADMIN_CARD_TRANSACTION_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select></label><label>币种<input maxLength={3} value={transactionQuery.currency ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ currency: event.target.value.toUpperCase() || undefined })} placeholder="USD" /></label><label>开始日期<input type="date" value={transactionQuery.from ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ from: event.target.value || undefined })} /></label><label>结束日期<input type="date" value={transactionQuery.to ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ to: event.target.value || undefined })} /></label><label>每页<select value={transactionQuery.limit} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ limit: Number(event.target.value) })}><option value={10}>10</option><option value={25}>25</option></select></label><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('transactions')}>读取交易</button></div></>}</section>{display.error && <div className="inline-error page-error"><AlertTriangle />{display.error}</div>}{display.view?.empty && <section className="empty-state"><Search /><h3>NO CARD EVENTS</h3><p>当前 Card 没有可显示的公开生命周期事件。</p></section>}{display.view && !display.view.empty && (display.view.kind === 'TIMELINE' ? <DataCard section={{ title: 'Lifecycle Timeline', description, value: display.view.value }} query="" /> : <CardReadOnlyPanel view={display.view} description={description} />)}{mode === 'card' && hasTransactionResults && <CardTransactionsPanel feed={visibleTransactionFeed} busy={Boolean(display.busy)} next={() => { if (visibleTransactionFeed.nextCursor) void run('transactions', visibleTransactionFeed.nextCursor) }} />}{mode === 'card' && transactionsLoaded && !hasTransactionResults && visibleTransactionFeed.scope === collectionScope && display.busy !== 'transactions' && transactionFeed.scope === collectionScope && <section className="empty-state card-transaction-empty"><Search /><h3>NO CARD TRANSACTIONS</h3><p>当前筛选条件下没有可显示的公开交易。</p></section>}</>
 }
 
 function OperationsWorkspace({ session, tenantId }: { session: AdminSession; tenantId: string }) {

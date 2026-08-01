@@ -35,3 +35,10 @@ export const acceptsResponse = (
   gate.generation === ticket.generation &&
   gate.scope === currentScope &&
   ticket.scope === currentScope
+
+export const acceptsMountedResponse = (
+  mounted: boolean,
+  gate: RequestGate,
+  ticket: RequestTicket,
+  currentScope: string,
+): boolean => mounted && acceptsResponse(gate, ticket, currentScope)

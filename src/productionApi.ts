@@ -1,6 +1,7 @@
 import { runtimeConfig } from './runtimeConfig'
-import { adminRoutes, type DataSource } from './adminRoutes'
+import { adminRoutes, type AdminCardTransactionQuery, type DataSource } from './adminRoutes'
 import { MAX_CARD_WORKSPACE_JSON_BYTES } from './cardWorkspaceContract'
+import { MAX_CARD_TRANSACTION_JSON_BYTES } from './cardTransactionContract'
 
 export const DEFAULT_API = runtimeConfig.apiUrl
 export type { DataSource } from './adminRoutes'
@@ -150,6 +151,7 @@ export const productionApi={
  card:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.card(tenantId,cardId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
  cardBalance:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.cardBalance(tenantId,cardId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
  cardTimeline:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.cardTimeline(tenantId,cardId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
+ cardTransactions:(_base:string,key:string,tenantId:string,cardId:string,query:AdminCardTransactionQuery,cursor?:string)=>apiRequest<string>(adminRoutes.cardTransactions(tenantId,cardId,query,cursor),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_TRANSACTION_JSON_BYTES}),
  freezeCard:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.freezeCard(tenantId,cardId),key,'POST',{idempotencyKey:crypto.randomUUID()},{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
  unfreezeCard:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.unfreezeCard(tenantId,cardId),key,'POST',{idempotencyKey:crypto.randomUUID()},{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
  trace:(_base:string,key:string,tenantId:string,environment:DataSource,id:string)=>apiRequest<TraceReport>(`/admin/tenants/${tenantId}/operations/traces/${encodeURIComponent(id)}?${query(environment)}`,key),
