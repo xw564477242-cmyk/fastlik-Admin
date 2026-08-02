@@ -144,7 +144,7 @@ export const adminKycSessionReadAllowed = (
   if (!validId(session.user.id) || !validId(session.user.tenantId) || !validId(selectedTenantId)) return false
   if (!validAuthorities(session.user.roles) || !validAuthorities(session.user.permissions)) return false
   if (!session.user.permissions.includes('admin:read')) return false
-  if (selectedTenantId !== session.user.tenantId && !session.user.permissions.includes('platform:tenants:write')) return false
+  if (selectedTenantId !== session.user.tenantId) return false
   if (typeof session.accessToken !== 'string' || session.accessToken.trim().length === 0) return false
   const expiry = Date.parse(session.expiresAt)
   return Number.isFinite(expiry) && expiry > now

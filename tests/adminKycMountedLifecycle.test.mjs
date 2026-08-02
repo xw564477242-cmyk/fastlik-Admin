@@ -24,7 +24,7 @@ const session = (patch = {}) => ({
   accessToken: 'token-1',
   expiresAt: '2099-01-01T00:00:00.000Z',
   user: {
-    id: 'admin-1', tenantId: 'home-tenant', environment: 'TEST', roles: ['ADMIN'], permissions: ['admin:read', 'platform:tenants:write'],
+    id: 'admin-1', tenantId: 'tenant-1', environment: 'TEST', roles: ['ADMIN'], permissions: ['admin:read'],
     ...patch,
   },
 })
