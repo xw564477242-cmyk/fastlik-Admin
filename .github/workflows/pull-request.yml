@@ -221,4 +221,5 @@ jobs:
             card-transaction-contract-evidence.json
             build-provenance.sha256
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 7
