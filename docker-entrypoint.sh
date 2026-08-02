@@ -6,7 +6,7 @@ set -eu
 : "${RAILWAY_GIT_COMMIT_SHA:?RAILWAY_GIT_COMMIT_SHA is required}"
 
 case "$VITE_FASTLINK_ENVIRONMENT" in
-  LOCAL|SANDBOX|UAT|PRODUCTION) ;;
+  LOCAL|SANDBOX|TEST|UAT|PRODUCTION) ;;
   *) echo "Invalid VITE_FASTLINK_ENVIRONMENT" >&2; exit 1 ;;
 esac
 
@@ -15,9 +15,9 @@ case "$VITE_FASTLINK_API_URL" in
   *) echo "VITE_FASTLINK_API_URL must be an explicit HTTPS URL" >&2; exit 1 ;;
 esac
 
-if [ "$VITE_FASTLINK_ENVIRONMENT" = "SANDBOX" ] \
+if { [ "$VITE_FASTLINK_ENVIRONMENT" = "SANDBOX" ] || [ "$VITE_FASTLINK_ENVIRONMENT" = "TEST" ]; } \
   && [ "$VITE_FASTLINK_API_URL" != "https://fastlink-backend-dev-development-a.up.railway.app/api" ]; then
-  echo "SANDBOX Admin must use the approved Backend Dev API" >&2
+  echo "SANDBOX/TEST Admin must use the approved Backend Dev API" >&2
   exit 1
 fi
 

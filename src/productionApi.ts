@@ -4,6 +4,7 @@ import { MAX_CARD_WORKSPACE_JSON_BYTES } from './cardWorkspaceContract'
 import { MAX_CARD_TRANSACTION_JSON_BYTES } from './cardTransactionContract'
 import { MAX_TREASURY_RECONCILIATION_JSON_BYTES } from './treasuryReconciliationContract'
 import { MAX_WALLET_OPERATION_LIST_JSON_BYTES } from './walletOperationListContract'
+import { adminKycPath, MAX_ADMIN_KYC_JSON_BYTES, parseAdminKycResponse, type AdminKycEnvironment, type AdminKycRecord } from './adminKycContract'
 
 export const DEFAULT_API = runtimeConfig.apiUrl
 export type { DataSource } from './adminRoutes'
@@ -158,7 +159,7 @@ export const productionApi={
  merchantPayments:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Page<MerchantPayment>>(`/admin/tenants/${tenantId}/merchant/payments?${query(environment)}&limit=100`,key),
  apiClients:(_base:string,key:string,tenantId:string)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/api-clients`,key),
  events:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/events?${query(environment)}`,key),
- user:(_base:string,key:string,tenantId:string,environment:DataSource,userId:string)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/users/${encodeURIComponent(userId)}?${query(environment)}`,key),
+ adminKyc:async(_base:string,key:string,tenantId:string,environment:AdminKycEnvironment,userId:string,signal?:AbortSignal):Promise<AdminKycRecord>=>parseAdminKycResponse(await apiRequest<string>(adminKycPath(tenantId,userId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_ADMIN_KYC_JSON_BYTES},signal),userId),
  card:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.card(tenantId,cardId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
  cardBalance:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.cardBalance(tenantId,cardId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
  cardTimeline:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.cardTimeline(tenantId,cardId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
