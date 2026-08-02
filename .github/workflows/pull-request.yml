@@ -156,6 +156,7 @@ jobs:
             src/runtimeConfig.ts \
             src/useScopedRequestLifecycle.ts \
             src/cardTransactionContract.ts \
+            tests/adminCardBalanceMountedLifecycle.test.mjs \
             tests/adminRoutes.test.mjs \
             tests/cardTimelineContract.test.mjs \
             tests/cardTimelineMountedLifecycle.test.mjs \
@@ -202,6 +203,7 @@ jobs:
             src/runtimeConfig.ts
             src/useScopedRequestLifecycle.ts
             src/cardTransactionContract.ts
+            tests/adminCardBalanceMountedLifecycle.test.mjs
             tests/adminRoutes.test.mjs
             tests/cardTimelineContract.test.mjs
             tests/cardTimelineMountedLifecycle.test.mjs
