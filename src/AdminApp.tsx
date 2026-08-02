@@ -67,13 +67,15 @@ import {
   type AdminCardTransactionQuery,
 } from './adminRoutes'
 import {
-  cardWorkspaceBaseScope,
+  adminCardSnapshotFailurePolicy,
+  adminCardSnapshotSessionScope,
   cardWorkspaceRequestScope,
   CardWorkspaceContractError,
   parseCardWorkspaceResponse,
   visibleCardWorkspaceState,
   type AdminCardBalance,
   type AdminCardDetail,
+  type AdminCardLimits,
   type CardWorkspaceAction,
   type CardWorkspaceView,
 } from './cardWorkspaceContract'
@@ -495,22 +497,35 @@ function GenericTable({ rows }: { rows: JsonRecord[] }) {
 
 function CardFields({ card }: { card: AdminCardDetail }) {
   const fields = [
-    ['Card ID', card.id], ['Type', card.type], ['Status', card.status], ['Last 4', card.last4],
+    ['Card ID', card.id], ['Customer ID', card.customerId], ['Environment', card.environment],
+    ['Type', card.type], ['Status', card.status], ['Masked PAN', card.maskedPan], ['Last 4', card.last4],
     ['Expiry month', card.expiryMonth], ['Expiry year', card.expiryYear], ['Currency', card.currency], ['Alias', card.alias],
+    ['Created at', card.createdAt], ['Updated at', card.updatedAt],
   ] as const
   return <dl className="card-contract-grid">{fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{displayValue(value)}</dd></div>)}</dl>
 }
 
 function BalanceFields({ balance }: { balance: AdminCardBalance }) {
   const fields = [
+    ['Card ID', balance.cardId],
     ['Available (minor)', balance.availableBalanceMinor], ['Current (minor)', balance.currentBalanceMinor],
-    ['Pending (minor)', balance.pendingAmountMinor], ['Currency', balance.currency], ['Updated at', balance.updatedAt],
+    ['Pending (minor)', balance.pendingAmountMinor], ['Currency', balance.currency], ['As of', balance.asOf],
   ] as const
   return <dl className="card-contract-grid balance-grid">{fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
 }
 
-function CardReadOnlyPanel({ view, description }: { view: Extract<CardWorkspaceView, { kind: 'CARD' | 'BALANCE' }>; description: string }) {
-  return <article className="panel card-contract-panel"><div className="panel-title"><div><h3>{view.kind === 'CARD' ? 'Card Detail' : 'Card Balance'}</h3><p>{description}</p></div><span className="record-count">TYPED CONTRACT</span></div>{view.kind === 'CARD' ? <><CardFields card={view.value} />{view.value.balance && <><h4>Balance snapshot</h4><BalanceFields balance={view.value.balance} /></>}</> : <BalanceFields balance={view.value} />}</article>
+function LimitsFields({ limits }: { limits: AdminCardLimits }) {
+  const fields = [
+    ['Card ID', limits.cardId], ['Single transaction (minor)', limits.singleTransactionMinor],
+    ['Daily spend (minor)', limits.dailySpendMinor], ['Monthly spend (minor)', limits.monthlySpendMinor],
+    ['Daily ATM (minor)', limits.dailyAtmMinor], ['As of', limits.asOf],
+  ] as const
+  return <dl className="card-contract-grid balance-grid">{fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{displayValue(value)}</dd></div>)}</dl>
+}
+
+function CardReadOnlyPanel({ view, description }: { view: Extract<CardWorkspaceView, { kind: 'CARD' | 'BALANCE' | 'LIMITS' }>; description: string }) {
+  const title = view.kind === 'CARD' ? 'Card Detail Snapshot' : view.kind === 'BALANCE' ? 'Card Balance Snapshot' : 'Card Limits Snapshot'
+  return <article className="panel card-contract-panel"><div className="panel-title"><div><h3>{title}</h3><p>{description}</p></div><span className="record-count">PERSISTED · NO PROVIDER</span></div>{view.kind === 'CARD' ? <CardFields card={view.value} /> : view.kind === 'BALANCE' ? <BalanceFields balance={view.value} /> : <LimitsFields limits={view.value} />}</article>
 }
 
 function TransactionFields({ transaction }: { transaction: AdminCardTransaction }) {
@@ -560,20 +575,31 @@ function CardWorkspace({ session, tenantId, mode, invalidateSession }: { session
   const [selectedTransaction, setSelectedTransaction] = useState<AdminCardTransaction | null>(null)
   const [transactionsLoaded, setTransactionsLoaded] = useState(false)
   const source = session.user.environment as DataSource
-  const tokenIdentity = useRef<{ token: string; marker: string } | null>(null)
-  if (!tokenIdentity.current || tokenIdentity.current.token !== session.accessToken) {
-    tokenIdentity.current = { token: session.accessToken, marker: crypto.randomUUID() }
+  const tokenIdentity = useRef<{ session: AdminSession; token: string; marker: string } | null>(null)
+  if (!tokenIdentity.current || tokenIdentity.current.session !== session) {
+    tokenIdentity.current = { session, token: session.accessToken, marker: crypto.randomUUID() }
   }
   const tokenMarker = tokenIdentity.current.marker
   const timelineSessionScope = cardTimelineSessionScope(session, runtimeConfig.environment, tenantId, tokenMarker)
+  const snapshotSessionScope = adminCardSnapshotSessionScope(
+    session.user.id,
+    session.expiresAt,
+    session.user.tenantId,
+    tenantId,
+    source,
+    runtimeConfig.environment,
+    tokenMarker,
+  )
   const baseScope = mode === 'history'
     ? timelineSessionScope ?? `blocked-card-timeline\u0000${tokenMarker}`
-    : `${cardWorkspaceBaseScope(session.user.id, session.expiresAt, tenantId, source, mode)}\u0000${tokenMarker}`
+    : snapshotSessionScope ?? `blocked-card-snapshots\u0000${tokenMarker}`
   const { mounted, requestAbort: transactionAbort, requestGate } = useScopedRequestLifecycle(baseScope)
   const stateScope = useRef(baseScope)
+  const liveBaseScope = useRef(baseScope)
   const currentToken = useRef(session.accessToken)
   const invalidateSessionRef = useRef(invalidateSession)
   currentToken.current = session.accessToken
+  liveBaseScope.current = baseScope
   invalidateSessionRef.current = invalidateSession
   const display = visibleCardWorkspaceState(stateScope.current, baseScope, { cardId, view, busy, error })
   const scopeIsCurrent = stateScope.current === baseScope
@@ -582,7 +608,8 @@ function CardWorkspace({ session, tenantId, mode, invalidateSession }: { session
     ? transactionFeed
     : createCardTransactionFeed(collectionScope)
   const historySessionAllowed = timelineSessionScope !== null
-  const workspaceReadAllowed = mode !== 'history' || historySessionAllowed
+  const snapshotSessionAllowed = snapshotSessionScope !== null
+  const workspaceReadAllowed = mode === 'history' ? historySessionAllowed : snapshotSessionAllowed
 
   const run = async (action: CardWorkspaceAction, cursor: string | null = null) => {
     if (!scopeIsCurrent) return
@@ -598,6 +625,14 @@ function CardWorkspace({ session, tenantId, mode, invalidateSession }: { session
       setTransactionsLoaded(false)
       return
     }
+    if (mode === 'card' && !snapshotSessionAllowed) {
+      abortCurrentRequest(transactionAbort)
+      invalidateRequests(requestGate.current)
+      setBusy('')
+      setError('Card snapshots only permit the current home-tenant SANDBOX or TEST Admin session')
+      setView(null)
+      return
+    }
     if (action === 'history' && !cardTimelineSessionReadAllowed(session, runtimeConfig.environment, tenantId)) {
       abortCurrentRequest(transactionAbort)
       invalidateRequests(requestGate.current)
@@ -607,24 +642,28 @@ function CardWorkspace({ session, tenantId, mode, invalidateSession }: { session
     }
     const transactionScope = cardTransactionCollectionScope(session.user.id, session.expiresAt, tenantId, source, id, transactionQuery)
     const timelineScope = cardTimelineCollectionScope(session.user.id, session.expiresAt, tenantId, source, id, tokenMarker)
+    const snapshotAction = action === 'read' || action === 'balance' || action === 'limits'
     const requestScope = action === 'transactions'
       ? cardTransactionRequestScope(session.user.id, session.expiresAt, tenantId, source, id, transactionQuery, cursor)
       : action === 'history'
         ? cardTimelineRequestScope(session.user.id, session.expiresAt, tenantId, source, id, tokenMarker)
-        : cardWorkspaceRequestScope(session.user.id, session.expiresAt, tenantId, source, mode, id, action)
+        : `${cardWorkspaceRequestScope(session.user.id, session.expiresAt, tenantId, source, mode, id, action)}\u0000${tokenMarker}`
     const ticket = beginRequest(requestGate.current, requestScope)
-    const controller = action === 'transactions' || action === 'history' ? replaceRequestAbort(transactionAbort) : null
+    const controller = action === 'transactions' || action === 'history' || snapshotAction ? replaceRequestAbort(transactionAbort) : null
     const capturedToken = session.accessToken
     const capturedTokenMarker = tokenMarker
     const previousFeed = cursor === null ? createCardTransactionFeed(transactionScope) : visibleTransactionFeed
     const acceptsCurrentCompletion = () => acceptsMountedResponse(mounted.current, requestGate.current, ticket, requestScope)
+      && liveBaseScope.current === baseScope
       && currentToken.current === capturedToken
       && tokenIdentity.current?.marker === capturedTokenMarker
       && (action !== 'history' || cardTimelineSessionReadAllowed(session, runtimeConfig.environment, tenantId))
+      && (!snapshotAction || snapshotSessionScope !== null)
     setBusy(action)
     setError('')
-    // History refreshes retain the last verified snapshot until every new page is verified.
-    if (action !== 'history') setView(null)
+    // Persisted snapshot and history refreshes retain their last verified object
+    // until a complete current-scope replacement passes the exact public contract.
+    if (action !== 'history' && !snapshotAction) setView(null)
     if (action === 'transactions' && cursor === null) {
       setTransactionFeed(previousFeed)
       setSelectedTransaction(null)
@@ -659,24 +698,50 @@ function CardWorkspace({ session, tenantId, mode, invalidateSession }: { session
         return
       }
       let value: unknown
-      if (action === 'read') value = await productionApi.card(DEFAULT_API, session.accessToken, tenantId, id)
-      if (action === 'balance') value = await productionApi.cardBalance(DEFAULT_API, session.accessToken, tenantId, id)
-      if (action === 'transactions') value = await productionApi.cardTransactions(DEFAULT_API, session.accessToken, tenantId, id, transactionQuery, cursor ?? undefined, controller?.signal)
-      if (action === 'freeze') value = await productionApi.freezeCard(DEFAULT_API, session.accessToken, tenantId, id)
-      if (action === 'unfreeze') value = await productionApi.unfreezeCard(DEFAULT_API, session.accessToken, tenantId, id)
+      if (action === 'read') value = await productionApi.cardSnapshot(DEFAULT_API, capturedToken, tenantId, id, controller?.signal)
+      if (action === 'balance') value = await productionApi.cardBalanceSnapshot(DEFAULT_API, capturedToken, tenantId, id, controller?.signal)
+      if (action === 'limits') value = await productionApi.cardLimitsSnapshot(DEFAULT_API, capturedToken, tenantId, id, controller?.signal)
+      if (action === 'transactions') value = await productionApi.cardTransactions(DEFAULT_API, capturedToken, tenantId, id, transactionQuery, cursor ?? undefined, controller?.signal)
+      if (action === 'freeze') {
+        await productionApi.freezeCard(DEFAULT_API, capturedToken, tenantId, id)
+        if (!acceptsCurrentCompletion()) return
+        value = await productionApi.cardSnapshot(DEFAULT_API, capturedToken, tenantId, id)
+      }
+      if (action === 'unfreeze') {
+        await productionApi.unfreezeCard(DEFAULT_API, capturedToken, tenantId, id)
+        if (!acceptsCurrentCompletion()) return
+        value = await productionApi.cardSnapshot(DEFAULT_API, capturedToken, tenantId, id)
+      }
       if (acceptsCurrentCompletion()) {
         if (action === 'transactions') {
           const page = parseAdminCardTransactionPage(value, transactionQuery)
           setTransactionFeed(appendAdminCardTransactionPage(previousFeed, page, cursor, transactionScope))
           setTransactionsLoaded(true)
         } else {
-          setView(parseCardWorkspaceResponse(action, value, id))
+          setView(parseCardWorkspaceResponse(
+            action === 'freeze' || action === 'unfreeze' ? 'read' : action,
+            value,
+            id,
+            source === 'TEST' ? 'TEST' : 'SANDBOX',
+          ))
         }
       }
     } catch (error) {
       if (acceptsCurrentCompletion()) {
-        if (action === 'history' && cardTimelineShouldClearSnapshot(error)) setView(null)
-        setError(cardWorkspaceErrorText(error))
+        if (snapshotAction) {
+          const policy = adminCardSnapshotFailurePolicy(error)
+          if (!policy.retainSnapshot) setView(null)
+          setError(policy.retainSnapshot
+            ? 'Card snapshot is temporarily unavailable; the last verified current-scope object remains unchanged'
+            : 'Card snapshot could not be verified for the current Admin scope')
+          if (policy.invalidateSession) {
+            setError('')
+            invalidateSessionRef.current(capturedToken)
+          }
+        } else {
+          if (action === 'history' && cardTimelineShouldClearSnapshot(error)) setView(null)
+          setError(cardWorkspaceErrorText(error))
+        }
         if (action === 'history' && cardTimelineShouldInvalidateSession(error)) {
           invalidateSessionRef.current(capturedToken)
         }
@@ -766,7 +831,7 @@ function CardWorkspace({ session, tenantId, mode, invalidateSession }: { session
     ? 'Data Source: Railway Backend · 已验证 10 页/最多 250 条公开事件；服务端仍有后续数据'
     : 'Data Source: Railway Backend · 精确 5 个事件字段，只读且分页链已验证'
   const hasTransactionResults = visibleTransactionFeed.transactions.length > 0
-  return <><PageHeading title={mode === 'card' ? 'Card Center' : 'Card History'} tenant={tenantId} source={source} busy={Boolean(display.busy)} disabled={!workspaceReadAllowed} description={mode === 'history' ? `${tenantId} · 手动刷新只有在全部页面通过合同校验后才原子替换最后 verified snapshot。` : undefined} refresh={() => { if (scopeIsCurrent && workspaceReadAllowed) void run(mode === 'card' ? 'read' : 'history') }} />{mode === 'history' && !historySessionAllowed && <section className="unavailable" data-card-timeline-blocked="environment-or-session"><AlertTriangle /><div><h3>Card Timeline Gate Closed</h3><p>只允许当前有效的 SANDBOX 或 TEST Admin Session；不会向 UAT 或 PRODUCTION 发出请求。</p></div></section>}<section className="lookup-panel"><div><span>REAL CARD ID REQUIRED</span><h3>{mode === 'card' ? '卡片查询与生命周期控制' : '卡片生命周期审计'}</h3><p>必须输入真实 Card ID；切换管理员会话、租户、环境、页面或 Card ID 会立即清除旧响应。</p></div><form onSubmit={(event) => { event.preventDefault(); if (scopeIsCurrent && workspaceReadAllowed) void run(mode === 'card' ? 'read' : 'history') }}><input value={display.cardId} disabled={!scopeIsCurrent} onChange={(event) => changeCardId(event.target.value)} placeholder="输入 Railway 数据库中的 Card ID" /><button disabled={!scopeIsCurrent || !workspaceReadAllowed || Boolean(display.busy)}><Search />查询</button></form>{mode === 'card' && <><div className="action-row"><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('balance')}>读取余额</button><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('freeze')}>Freeze</button><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('unfreeze')}>Unfreeze</button></div><div className="card-transaction-filters"><label>状态<select value={transactionQuery.status} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionStatus(event.target.value as AdminCardTransactionQuery['status'])}><option value="ALL">ALL</option>{ADMIN_CARD_TRANSACTION_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select></label><label>类型<select value={transactionQuery.type ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionType(event.target.value ? event.target.value as AdminCardTransactionQuery['type'] : undefined)}><option value="">全部</option>{ADMIN_CARD_TRANSACTION_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select></label><label>币种<input maxLength={3} value={transactionQuery.currency ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ currency: event.target.value.toUpperCase() || undefined })} placeholder="USD" /></label><label>开始日期<input type="date" value={transactionQuery.from ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ from: event.target.value || undefined })} /></label><label>结束日期<input type="date" value={transactionQuery.to ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ to: event.target.value || undefined })} /></label><label>每页<select value={transactionQuery.limit} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ limit: Number(event.target.value) })}><option value={10}>10</option><option value={25}>25</option></select></label><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('transactions')}>读取交易</button></div></>}</section>{display.error && <div className="inline-error page-error"><AlertTriangle />{display.error}</div>}{display.view?.empty && <section className="empty-state"><Search /><h3>NO CARD EVENTS</h3><p>当前 Card 没有可显示的公开生命周期事件。</p></section>}{display.view && !display.view.empty && (display.view.kind === 'TIMELINE' ? <DataCard section={{ title: 'Lifecycle Timeline', description, value: display.view.value }} query="" /> : <CardReadOnlyPanel view={display.view} description={description} />)}{mode === 'card' && hasTransactionResults && <CardTransactionsPanel feed={visibleTransactionFeed} selected={selectedTransaction} busy={Boolean(display.busy)} select={(transactionId) => void selectTransaction(transactionId)} next={() => { if (visibleTransactionFeed.nextCursor) void run('transactions', visibleTransactionFeed.nextCursor) }} />}{mode === 'card' && transactionsLoaded && !hasTransactionResults && visibleTransactionFeed.scope === collectionScope && display.busy !== 'transactions' && transactionFeed.scope === collectionScope && <section className="empty-state card-transaction-empty"><Search /><h3>NO CARD TRANSACTIONS</h3><p>当前筛选条件下没有可显示的公开交易。</p></section>}</>
+  return <><PageHeading title={mode === 'card' ? 'Card Center' : 'Card History'} tenant={tenantId} source={source} busy={Boolean(display.busy)} disabled={!workspaceReadAllowed} description={mode === 'history' ? `${tenantId} · 手动刷新只有在全部页面通过合同校验后才原子替换最后 verified snapshot。` : `${tenantId} · 详情、余额、限额只读取持久化 snapshot；瞬态失败保留最后 verified 对象。`} refresh={() => { if (scopeIsCurrent && workspaceReadAllowed) void run(mode === 'card' ? 'read' : 'history') }} />{mode === 'history' && !historySessionAllowed && <section className="unavailable" data-card-timeline-blocked="environment-or-session"><AlertTriangle /><div><h3>Card Timeline Gate Closed</h3><p>只允许当前有效的 SANDBOX 或 TEST Admin Session；不会向 UAT 或 PRODUCTION 发出请求。</p></div></section>}{mode === 'card' && !snapshotSessionAllowed && <section className="unavailable" data-card-snapshot-blocked="environment-session-or-tenant"><AlertTriangle /><div><h3>Card Snapshot Gate Closed</h3><p>只允许当前有效的 home-tenant SANDBOX 或 TEST Admin Session；不会向跨租户、UAT 或 PRODUCTION 发出请求。</p></div></section>}<section className="lookup-panel"><div><span>REAL CARD ID REQUIRED</span><h3>{mode === 'card' ? '卡片持久化快照与生命周期控制' : '卡片生命周期审计'}</h3><p>必须输入真实 Card ID；切换管理员会话、租户、环境、页面或 Card ID 会立即清除旧响应。</p></div><form onSubmit={(event) => { event.preventDefault(); if (scopeIsCurrent && workspaceReadAllowed) void run(mode === 'card' ? 'read' : 'history') }}><input value={display.cardId} disabled={!scopeIsCurrent} onChange={(event) => changeCardId(event.target.value)} placeholder="输入 Railway 数据库中的 Card ID" /><button disabled={!scopeIsCurrent || !workspaceReadAllowed || Boolean(display.busy)}><Search />查询</button></form>{mode === 'card' && <><div className="action-row"><button disabled={!scopeIsCurrent || !workspaceReadAllowed || !display.cardId || Boolean(display.busy)} onClick={() => void run('balance')}>读取余额快照</button><button disabled={!scopeIsCurrent || !workspaceReadAllowed || !display.cardId || Boolean(display.busy)} onClick={() => void run('limits')}>读取限额快照</button><button disabled={!scopeIsCurrent || !workspaceReadAllowed || !display.cardId || Boolean(display.busy)} onClick={() => void run('freeze')}>Freeze</button><button disabled={!scopeIsCurrent || !workspaceReadAllowed || !display.cardId || Boolean(display.busy)} onClick={() => void run('unfreeze')}>Unfreeze</button></div><div className="card-transaction-filters"><label>状态<select value={transactionQuery.status} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionStatus(event.target.value as AdminCardTransactionQuery['status'])}><option value="ALL">ALL</option>{ADMIN_CARD_TRANSACTION_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select></label><label>类型<select value={transactionQuery.type ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionType(event.target.value ? event.target.value as AdminCardTransactionQuery['type'] : undefined)}><option value="">全部</option>{ADMIN_CARD_TRANSACTION_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select></label><label>币种<input maxLength={3} value={transactionQuery.currency ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ currency: event.target.value.toUpperCase() || undefined })} placeholder="USD" /></label><label>开始日期<input type="date" value={transactionQuery.from ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ from: event.target.value || undefined })} /></label><label>结束日期<input type="date" value={transactionQuery.to ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ to: event.target.value || undefined })} /></label><label>每页<select value={transactionQuery.limit} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ limit: Number(event.target.value) })}><option value={10}>10</option><option value={25}>25</option></select></label><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('transactions')}>读取交易</button></div></>}</section>{display.error && <div className="inline-error page-error"><AlertTriangle />{display.error}</div>}{display.view?.empty && <section className="empty-state"><Search /><h3>NO CARD EVENTS</h3><p>当前 Card 没有可显示的公开生命周期事件。</p></section>}{display.view && !display.view.empty && (display.view.kind === 'TIMELINE' ? <DataCard section={{ title: 'Lifecycle Timeline', description, value: display.view.value }} query="" /> : <CardReadOnlyPanel view={display.view} description={description} />)}{mode === 'card' && hasTransactionResults && <CardTransactionsPanel feed={visibleTransactionFeed} selected={selectedTransaction} busy={Boolean(display.busy)} select={(transactionId) => void selectTransaction(transactionId)} next={() => { if (visibleTransactionFeed.nextCursor) void run('transactions', visibleTransactionFeed.nextCursor) }} />}{mode === 'card' && transactionsLoaded && !hasTransactionResults && visibleTransactionFeed.scope === collectionScope && display.busy !== 'transactions' && transactionFeed.scope === collectionScope && <section className="empty-state card-transaction-empty"><Search /><h3>NO CARD TRANSACTIONS</h3><p>当前筛选条件下没有可显示的公开交易。</p></section>}</>
 }
 
 function OperationsWorkspace({ session, tenantId, onUnauthorized, invalidateSession }: { session: AdminSession; tenantId: string; onUnauthorized: () => void; invalidateSession: (expectedAccessToken: string) => void }) {

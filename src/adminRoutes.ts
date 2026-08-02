@@ -233,8 +233,12 @@ export const adminRoutes = {
     `${adminRoutes.tenant(tenantId)}/wallet/operations/${segment(operationId)}?${environmentQuery(environment)}`,
   card: (tenantId: string, cardId: string) =>
     `${adminRoutes.tenant(tenantId)}/cards/${segment(cardId)}`,
-  cardBalance: (tenantId: string, cardId: string) =>
-    `${adminRoutes.card(tenantId, cardId)}/balance`,
+  cardSnapshot: (tenantId: string, cardId: string) =>
+    `${adminRoutes.card(tenantId, cardId)}/snapshot`,
+  cardBalanceSnapshot: (tenantId: string, cardId: string) =>
+    `${adminRoutes.cardSnapshot(tenantId, cardId)}/balance`,
+  cardLimitsSnapshot: (tenantId: string, cardId: string) =>
+    `${adminRoutes.cardSnapshot(tenantId, cardId)}/limits`,
   cardTimeline: (tenantId: string, cardId: string, cursor?: string) =>
     `${adminRoutes.card(tenantId, cardId)}/timeline?${cardTimelineQuery(cursor)}`,
   cardTransactions: (tenantId: string, cardId: string, query: AdminCardTransactionQuery, cursor?: string) =>
