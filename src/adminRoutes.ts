@@ -1,4 +1,27 @@
 export type DataSource = 'SANDBOX' | 'TEST' | 'UAT' | 'PRODUCTION'
+export const ADMIN_WALLET_OPERATION_TYPES = [
+  'DEPOSIT',
+  'INTERNAL_TRANSFER',
+  'WITHDRAWAL',
+  'TREASURY_RESERVE',
+  'FX_CONVERSION',
+] as const
+export const ADMIN_WALLET_OPERATION_STATUSES = [
+  'PROCESSING',
+  'PENDING_SETTLEMENT',
+  'COMPLETED',
+  'FAILED',
+] as const
+
+export type AdminWalletOperationType = (typeof ADMIN_WALLET_OPERATION_TYPES)[number]
+export type AdminWalletOperationStatus = (typeof ADMIN_WALLET_OPERATION_STATUSES)[number]
+export type AdminWalletOperationQuery = Readonly<{
+  status?: AdminWalletOperationStatus
+  type?: AdminWalletOperationType
+  assetCode?: string
+  limit: number
+  offset: number
+}>
 export const ADMIN_CARD_TRANSACTION_STATUSES = [
   'AUTHORIZED',
   'CLEARED',
@@ -46,6 +69,36 @@ export type AdminCardTransactionQuery = Readonly<{
 const segment = (value: string) => encodeURIComponent(value)
 const environmentQuery = (environment: DataSource) =>
   `environment=${encodeURIComponent(environment)}`
+
+const walletOperationQuery = (
+  environment: Extract<DataSource, 'SANDBOX' | 'TEST'>,
+  query: AdminWalletOperationQuery,
+): string => {
+  if (!(environment === 'SANDBOX' || environment === 'TEST')) throw new Error('Wallet operation environment is invalid')
+  if (query.status && !(ADMIN_WALLET_OPERATION_STATUSES as readonly string[]).includes(query.status)) {
+    throw new Error('Wallet operation status is invalid')
+  }
+  if (query.type && !(ADMIN_WALLET_OPERATION_TYPES as readonly string[]).includes(query.type)) {
+    throw new Error('Wallet operation type is invalid')
+  }
+  if (query.assetCode && !/^[A-Z0-9]{2,12}$/.test(query.assetCode)) {
+    throw new Error('Wallet operation asset code is invalid')
+  }
+  if (!Number.isInteger(query.limit) || query.limit < 1 || query.limit > 100) {
+    throw new Error('Wallet operation limit must be between 1 and 100')
+  }
+  if (!Number.isInteger(query.offset) || query.offset < 0) {
+    throw new Error('Wallet operation offset is invalid')
+  }
+  const params = new URLSearchParams()
+  params.set('environment', environment)
+  if (query.status) params.set('status', query.status)
+  if (query.type) params.set('type', query.type)
+  if (query.assetCode) params.set('assetCode', query.assetCode)
+  params.set('limit', String(query.limit))
+  params.set('offset', String(query.offset))
+  return params.toString()
+}
 
 export const isCanonicalSignedAdminCardTransactionCursor = (cursor: unknown): cursor is string => {
   if (
@@ -120,8 +173,11 @@ export const adminRoutes = {
     `${adminRoutes.tenant(tenantId)}/settlement/trial-balance?${environmentQuery(environment)}`,
   treasuryDailyClosing: (tenantId: string, environment: Extract<DataSource, 'SANDBOX' | 'TEST'>) =>
     `${adminRoutes.tenant(tenantId)}/settlement/daily-closing?${environmentQuery(environment)}`,
-  walletOperations: (tenantId: string, environment: DataSource) =>
-    `${adminRoutes.tenant(tenantId)}/wallet/operations?${environmentQuery(environment)}&limit=100`,
+  walletOperations: (
+    tenantId: string,
+    environment: Extract<DataSource, 'SANDBOX' | 'TEST'>,
+    query: AdminWalletOperationQuery,
+  ) => `${adminRoutes.tenant(tenantId)}/wallet/operations?${walletOperationQuery(environment, query)}`,
   walletTransactions: (tenantId: string, environment: DataSource) =>
     `${adminRoutes.tenant(tenantId)}/wallet/transactions?${environmentQuery(environment)}&limit=100`,
   walletOperation: (tenantId: string, operationId: string, environment: DataSource) =>

@@ -59,6 +59,7 @@ import {
   syncRequestScope,
 } from './requestGeneration'
 import { useScopedRequestLifecycle } from './useScopedRequestLifecycle'
+import { WalletOperationsWorkspace } from './WalletOperationsWorkspace'
 import {
   ADMIN_CARD_TRANSACTION_STATUS_BY_TYPE,
   type AdminCardTransactionQuery,
@@ -739,13 +740,7 @@ function OperationsWorkspace({ session, tenantId }: { session: AdminSession; ten
     setError('')
     setSections([])
     try {
-      if (tab === 'wallet') {
-        const next = await Promise.all([
-          settledSection('Wallet Operations', 'Deposit, transfer and withdrawal operations', productionApi.walletOperations(DEFAULT_API, session.accessToken, tenantId, source)),
-          settledSection('Wallet Transactions', 'Real transaction history', productionApi.walletTransactions(DEFAULT_API, session.accessToken, tenantId, source)),
-        ])
-        if (acceptsResponse(requestGate.current, ticket, requestScope)) setSections(next)
-      } else if (tab === 'user') {
+      if (tab === 'user') {
         if (!lookup.trim()) throw new Error('请输入真实 User ID')
         const value = await productionApi.user(DEFAULT_API, session.accessToken, tenantId, source, lookup.trim())
         if (acceptsResponse(requestGate.current, ticket, requestScope)) setSections([{ title: 'User & KYC', description: 'Real user detail and KYC status', value }])
@@ -764,12 +759,9 @@ function OperationsWorkspace({ session, tenantId }: { session: AdminSession; ten
     invalidateRequests(requestGate.current)
     setLookup('')
     setOperationDetail(idleWalletOperationDetail())
-    if (tab === 'wallet') void run()
-    else {
-      setSections([])
-      setError('')
-      setBusy(false)
-    }
+    setSections([])
+    setError('')
+    setBusy(false)
   }, [tenantId, tab, source]) // eslint-disable-line react-hooks/exhaustive-deps
   const switchTab = (next: 'wallet' | 'operation' | 'user' | 'trace') => {
     invalidateRequests(requestGate.current)
@@ -781,5 +773,5 @@ function OperationsWorkspace({ session, tenantId }: { session: AdminSession; ten
     setOperationDetail(idleWalletOperationDetail())
   }
   const placeholder = tab === 'operation' ? '真实 Wallet Operation ID' : tab === 'user' ? '真实 User ID' : '8–128 位 Trace ID'
-  return <><PageHeading title="终端用户运营" tenant={tenantId} source={source} busy={busy} refresh={() => void run()} /><div className="workspace-tabs"><button className={tab === 'wallet' ? 'active' : ''} onClick={() => switchTab('wallet')}>Wallet Operations</button><button className={tab === 'operation' ? 'active' : ''} onClick={() => switchTab('operation')}>Operation Detail</button><button className={tab === 'user' ? 'active' : ''} onClick={() => switchTab('user')}>User / KYC</button><button className={tab === 'trace' ? 'active' : ''} onClick={() => switchTab('trace')}>Trace ID</button></div>{tab !== 'wallet' && <section className="lookup-panel compact"><input value={lookup} onChange={(event) => setLookup(event.target.value)} placeholder={placeholder} /><button disabled={busy} onClick={() => void run()}><ChevronRight />查询</button></section>}{error && <div className="inline-error page-error"><AlertTriangle />{error}</div>}{operationDetail.status === 'LOADING' && <Loading />}{operationDetail.status === 'NOT_FOUND' && <section className="empty-state"><Search /><h3>WALLET OPERATION NOT FOUND</h3><p>{operationDetail.message}</p></section>}{operationDetail.status === 'CONTRACT_ERROR' && <div className="inline-error page-error"><AlertTriangle />Backend Wallet Operation contract error · {operationDetail.message}</div>}{operationDetail.status === 'ERROR' && <div className="inline-error page-error"><AlertTriangle />{operationDetail.message}</div>}{operationDetail.status === 'SUCCESS' && <><DataCard section={{ title: 'Wallet Operation', description: `${source} · Validated operation identity, status, asset and amount`, value: [operationDetail.value.operation] }} query="" /><DataCard section={{ title: 'Wallet Accounts', description: 'Validated source and destination account summary', value: operationDetail.value.accounts }} query="" /><DataCard section={{ title: 'Journal Summary', description: 'Validated journal and entry counts; raw entries are not rendered', value: operationDetail.value.journals }} query="" /><DataCard section={{ title: 'Treasury Summary', description: 'Validated treasury position for the operation asset', value: operationDetail.value.treasury ? [operationDetail.value.treasury] : [] }} query="" /></>}{tab !== 'operation' && (busy && !sections.length ? <Loading /> : sections.map((section) => <DataCard key={section.title} section={section} query="" />))}</>
+  return <>{tab !== 'wallet' && <PageHeading title="终端用户运营" tenant={tenantId} source={source} busy={busy} refresh={() => void run()} />}<div className="workspace-tabs"><button className={tab === 'wallet' ? 'active' : ''} onClick={() => switchTab('wallet')}>Wallet Operations</button><button className={tab === 'operation' ? 'active' : ''} onClick={() => switchTab('operation')}>Operation Detail</button><button className={tab === 'user' ? 'active' : ''} onClick={() => switchTab('user')}>User / KYC</button><button className={tab === 'trace' ? 'active' : ''} onClick={() => switchTab('trace')}>Trace ID</button></div>{tab === 'wallet' && <WalletOperationsWorkspace session={session} tenantId={tenantId} />}{tab !== 'wallet' && <section className="lookup-panel compact"><input value={lookup} onChange={(event) => setLookup(event.target.value)} placeholder={placeholder} /><button disabled={busy} onClick={() => void run()}><ChevronRight />查询</button></section>}{error && <div className="inline-error page-error"><AlertTriangle />{error}</div>}{operationDetail.status === 'LOADING' && <Loading />}{operationDetail.status === 'NOT_FOUND' && <section className="empty-state"><Search /><h3>WALLET OPERATION NOT FOUND</h3><p>{operationDetail.message}</p></section>}{operationDetail.status === 'CONTRACT_ERROR' && <div className="inline-error page-error"><AlertTriangle />Backend Wallet Operation contract error · {operationDetail.message}</div>}{operationDetail.status === 'ERROR' && <div className="inline-error page-error"><AlertTriangle />{operationDetail.message}</div>}{operationDetail.status === 'SUCCESS' && <><DataCard section={{ title: 'Wallet Operation', description: `${source} · Validated operation identity, status, asset and amount`, value: [operationDetail.value.operation] }} query="" /><DataCard section={{ title: 'Wallet Accounts', description: 'Validated source and destination account summary', value: operationDetail.value.accounts }} query="" /><DataCard section={{ title: 'Journal Summary', description: 'Validated journal and entry counts; raw entries are not rendered', value: operationDetail.value.journals }} query="" /><DataCard section={{ title: 'Treasury Summary', description: 'Validated treasury position for the operation asset', value: operationDetail.value.treasury ? [operationDetail.value.treasury] : [] }} query="" /></>}{(tab === 'user' || tab === 'trace') && (busy && !sections.length ? <Loading /> : sections.map((section) => <DataCard key={section.title} section={section} query="" />))}</>
 }

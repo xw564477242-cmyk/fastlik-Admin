@@ -108,6 +108,65 @@
   margin-top: 16px;
 }
 
+.wallet-operation-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(150px, 240px));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.wallet-operation-filters label {
+  color: #657285;
+  font-size: 10px;
+}
+
+.wallet-operation-filters small {
+  display: block;
+  margin-top: 5px;
+  color: #b63543;
+}
+
+.wallet-operation-filters input,
+.wallet-operation-filters select {
+  width: 100%;
+  height: 38px;
+  margin-top: 6px;
+  border: 1px solid #dce4ec;
+  border-radius: 8px;
+  background: #fff;
+  color: #354256;
+  padding: 0 9px;
+}
+
+.wallet-operation-results .table-empty svg {
+  width: 14px;
+  margin-right: 7px;
+  vertical-align: middle;
+}
+
+.wallet-operation-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 14px;
+  color: #657285;
+  font-size: 10px;
+}
+
+.wallet-operation-pagination button {
+  border: 1px solid #dce4ec;
+  border-radius: 8px;
+  background: #fff;
+  color: #354256;
+  padding: 8px 12px;
+}
+
+.wallet-operation-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
 @media (max-width: 1100px) {
   .card-transaction-filters {
     grid-template-columns: repeat(3, minmax(120px, 1fr));
@@ -116,6 +175,10 @@
 
 @media (max-width: 720px) {
   .card-transaction-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .wallet-operation-filters {
     grid-template-columns: 1fr;
   }
 }

@@ -13,8 +13,8 @@ test('wallet routes keep tenant and environment boundaries immutable', () => {
   const tenantId = 'tenant/acme?environment=PRODUCTION'
 
   assert.equal(
-    adminRoutes.walletOperations(tenantId, 'TEST'),
-    '/admin/tenants/tenant%2Facme%3Fenvironment%3DPRODUCTION/wallet/operations?environment=TEST&limit=100',
+    adminRoutes.walletOperations(tenantId, 'TEST', { limit: 25, offset: 0 }),
+    '/admin/tenants/tenant%2Facme%3Fenvironment%3DPRODUCTION/wallet/operations?environment=TEST&limit=25&offset=0',
   )
   assert.equal(
     adminRoutes.walletTransactions(tenantId, 'UAT'),
