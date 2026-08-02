@@ -6,6 +6,7 @@ import {
   cardTimelineCollectionScope,
   cardTimelineRequestScope,
   cardTimelineSessionReadAllowed,
+  cardTimelineSessionScope,
   cardTimelineShouldClearSnapshot,
   cardTimelineShouldInvalidateSession,
   createAdminCardTimelineFeed,
@@ -117,14 +118,43 @@ test('actor, session, token identity, tenant, environment and card are bound int
   assert.notEqual(collection, cardTimelineRequestScope(...base))
 })
 
-test('only unexpired SANDBOX and TEST Admin sessions may read timeline', () => {
+test('only same-tenant, authorized, unexpired SANDBOX and TEST Admin sessions may read timeline', () => {
   const future = '2099-01-01T00:00:00.000Z'
-  assert.equal(cardTimelineSessionReadAllowed('admin-1', future, 'SANDBOX'), true)
-  assert.equal(cardTimelineSessionReadAllowed('admin-1', future, 'TEST'), true)
-  assert.equal(cardTimelineSessionReadAllowed('admin-1', future, 'UAT'), false)
-  assert.equal(cardTimelineSessionReadAllowed('admin-1', future, 'PRODUCTION'), false)
-  assert.equal(cardTimelineSessionReadAllowed('admin-1', '2020-01-01T00:00:00.000Z', 'TEST'), false)
-  assert.equal(cardTimelineSessionReadAllowed('bad actor', future, 'TEST'), false)
+  const session = (patch = {}, userPatch = {}) => ({
+    accessToken: 'token-current',
+    expiresAt: future,
+    user: {
+      id: 'admin-1', tenantId: 'tenant-1', environment: 'TEST', roles: ['ADMIN'], permissions: ['admin:read'],
+      ...userPatch,
+    },
+    ...patch,
+  })
+  assert.equal(cardTimelineSessionReadAllowed(session({}, { environment: 'SANDBOX' }), 'SANDBOX', 'tenant-1'), true)
+  assert.equal(cardTimelineSessionReadAllowed(session(), 'TEST', 'tenant-1'), true)
+  assert.equal(cardTimelineSessionReadAllowed(session({}, { environment: 'UAT' }), 'UAT', 'tenant-1'), false)
+  assert.equal(cardTimelineSessionReadAllowed(session({}, { environment: 'PRODUCTION' }), 'PRODUCTION', 'tenant-1'), false)
+  assert.equal(cardTimelineSessionReadAllowed(session({ expiresAt: '2020-01-01T00:00:00.000Z' }), 'TEST', 'tenant-1'), false)
+  assert.equal(cardTimelineSessionReadAllowed(session({}, { id: 'bad actor' }), 'TEST', 'tenant-1'), false)
+  assert.equal(cardTimelineSessionReadAllowed(session(), 'SANDBOX', 'tenant-1'), false)
+  assert.equal(cardTimelineSessionReadAllowed(session(), 'TEST', 'tenant-2'), false)
+  assert.equal(cardTimelineSessionReadAllowed(session({}, { permissions: ['platform:tenants:write'] }), 'TEST', 'tenant-1'), false)
+  assert.equal(cardTimelineSessionReadAllowed(session({ accessToken: '   ' }), 'TEST', 'tenant-1'), false)
+  assert.equal(cardTimelineSessionReadAllowed(session({}, { roles: [] }), 'TEST', 'tenant-1'), false)
+  assert.equal(cardTimelineSessionReadAllowed(session({}, { permissions: ['bad authority'] }), 'TEST', 'tenant-1'), false)
+})
+
+test('authorization, home tenant and token identity are bound into the mounted session scope', () => {
+  const base = {
+    accessToken: 'token-current',
+    expiresAt: '2099-01-01T00:00:00.000Z',
+    user: { id: 'admin-1', tenantId: 'tenant-1', environment: 'TEST', roles: ['ADMIN'], permissions: ['admin:read'] },
+  }
+  const scope = cardTimelineSessionScope(base, 'TEST', 'tenant-1', 'token-marker-a')
+  assert.ok(scope)
+  assert.notEqual(scope, cardTimelineSessionScope({ ...base, user: { ...base.user, roles: ['SUPPORT'] } }, 'TEST', 'tenant-1', 'token-marker-a'))
+  assert.notEqual(scope, cardTimelineSessionScope({ ...base, user: { ...base.user, permissions: ['admin:read', 'cards:read'] } }, 'TEST', 'tenant-1', 'token-marker-a'))
+  assert.notEqual(scope, cardTimelineSessionScope(base, 'TEST', 'tenant-1', 'token-marker-b'))
+  assert.equal(cardTimelineSessionScope(base, 'TEST', 'tenant-2', 'token-marker-a'), null)
 })
 
 test('only current authorization/scope terminal statuses clear a verified snapshot', () => {

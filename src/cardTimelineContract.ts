@@ -44,6 +44,18 @@ export type AdminCardTimelineType = (typeof ADMIN_CARD_TIMELINE_TYPES)[number]
 export type AdminCardTimelineStatus = (typeof ADMIN_CARD_TIMELINE_STATUSES)[number]
 export type AdminCardTimelineEnvironment = Extract<DataSource, 'SANDBOX' | 'TEST'>
 
+export type AdminCardTimelineSession = Readonly<{
+  accessToken: string
+  expiresAt: string
+  user: Readonly<{
+    id: string
+    tenantId: string
+    environment: string
+    roles: readonly string[]
+    permissions: readonly string[]
+  }>
+}>
+
 export type AdminCardTimelineEvent = Readonly<{
   id: string
   type: AdminCardTimelineType
@@ -324,17 +336,57 @@ export const cardTimelineRequestScope = (
   'atomic-refresh',
 ])
 
+const SAFE_ADMIN_TIMELINE_ID = /^[A-Za-z0-9._:-]{2,256}$/
+const SAFE_ADMIN_TIMELINE_AUTHORITY = /^[A-Za-z0-9:_-]{1,128}$/
+
+const validAdminTimelineId = (value: unknown): value is string =>
+  typeof value === 'string' && SAFE_ADMIN_TIMELINE_ID.test(value)
+
+const validAdminTimelineAuthorities = (value: unknown): value is readonly string[] =>
+  Array.isArray(value)
+  && value.length > 0
+  && value.every((authority) => typeof authority === 'string' && SAFE_ADMIN_TIMELINE_AUTHORITY.test(authority))
+
 export const cardTimelineSessionReadAllowed = (
-  actorId: string,
-  sessionExpiresAt: string,
-  environment: DataSource,
+  session: AdminCardTimelineSession,
+  runtimeEnvironment: string | undefined,
+  selectedTenantId: string,
   now = Date.now(),
-): environment is AdminCardTimelineEnvironment => {
-  const expiry = Date.parse(sessionExpiresAt)
-  return (environment === 'SANDBOX' || environment === 'TEST')
-    && /^[A-Za-z0-9._:-]{2,256}$/.test(actorId)
-    && Number.isFinite(expiry)
-    && expiry > now
+): boolean => {
+  if (runtimeEnvironment !== 'SANDBOX' && runtimeEnvironment !== 'TEST') return false
+  if (session.user.environment !== runtimeEnvironment) return false
+  if (!validAdminTimelineId(session.user.id)
+    || !validAdminTimelineId(session.user.tenantId)
+    || !validAdminTimelineId(selectedTenantId)) return false
+  if (session.user.tenantId !== selectedTenantId) return false
+  if (!validAdminTimelineAuthorities(session.user.roles)
+    || !validAdminTimelineAuthorities(session.user.permissions)
+    || !session.user.permissions.includes('admin:read')) return false
+  if (typeof session.accessToken !== 'string' || session.accessToken.trim().length === 0) return false
+  const expiry = Date.parse(session.expiresAt)
+  return Number.isFinite(expiry) && expiry > now
+}
+
+export const cardTimelineSessionScope = (
+  session: AdminCardTimelineSession,
+  runtimeEnvironment: string | undefined,
+  selectedTenantId: string,
+  tokenIdentityMarker: string,
+  now = Date.now(),
+): string | null => {
+  if (!cardTimelineSessionReadAllowed(session, runtimeEnvironment, selectedTenantId, now)
+    || !validAdminTimelineId(tokenIdentityMarker)) return null
+  return JSON.stringify([
+    session.user.id,
+    session.expiresAt,
+    tokenIdentityMarker,
+    session.user.tenantId,
+    selectedTenantId,
+    session.user.environment,
+    [...session.user.roles].sort(),
+    [...session.user.permissions].sort(),
+    'history',
+  ])
 }
 
 const cardTimelineFailureStatus = (error: unknown): number | null => {
@@ -373,6 +425,9 @@ export function adminCardTimelineContractEvidence(sourceCommit: string) {
     exactPageFields: Object.freeze([...ADMIN_CARD_TIMELINE_PAGE_FIELDS]),
     exactEventFields: Object.freeze([...ADMIN_CARD_TIMELINE_PUBLIC_FIELDS]),
     collectionScopeBindings: Object.freeze(['actorId', 'sessionExpiresAt', 'tokenIdentityMarker', 'tenantId', 'environment', 'cardId']),
+    sessionScopeBindings: Object.freeze(['actorId', 'sessionExpiresAt', 'tokenIdentityMarker', 'sessionTenantId', 'selectedTenantId', 'runtimeEnvironment', 'roles', 'permissions']),
+    sameTenantRequired: true,
+    requiredPermission: 'admin:read',
     requestGenerationBound: true,
     activeCancellationRequired: true,
     atomicRefresh: true,

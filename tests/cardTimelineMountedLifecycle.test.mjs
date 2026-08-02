@@ -6,12 +6,12 @@ import {
   cardTimelineCollectionScope,
   cardTimelineRequestScope,
   cardTimelineSessionReadAllowed,
+  cardTimelineSessionScope,
   cardTimelineShouldClearSnapshot,
   cardTimelineShouldInvalidateSession,
   createAdminCardTimelineFeed,
   parseAdminCardTimelinePage,
 } from '../src/cardTimelineContract.ts'
-import { cardWorkspaceBaseScope } from '../src/cardWorkspaceContract.ts'
 import {
   abortCurrentRequest,
   acceptsMountedResponse,
@@ -26,15 +26,30 @@ const identity = Object.freeze({
   actorId: 'admin-1',
   sessionExpiresAt: '2099-01-01T00:00:00.000Z',
   tenantId: 'tenant-1',
+  sessionTenantId: 'tenant-1',
   environment: 'TEST',
   cardId: 'card-1',
   accessToken: 'token-current',
   tokenIdentityMarker: 'token-marker-current',
+  roles: ['ADMIN'],
+  permissions: ['admin:read'],
 })
 const current = (patch = {}) => ({ ...identity, ...patch })
+const session = (value) => ({
+  accessToken: value.accessToken,
+  expiresAt: value.sessionExpiresAt,
+  user: {
+    id: value.actorId,
+    tenantId: value.sessionTenantId,
+    environment: value.environment,
+    roles: value.roles,
+    permissions: value.permissions,
+  },
+})
 const baseScope = (patch = {}) => {
   const value = current(patch)
-  return `${cardWorkspaceBaseScope(value.actorId, value.sessionExpiresAt, value.tenantId, value.environment, 'history')}\u0000${value.tokenIdentityMarker}`
+  return cardTimelineSessionScope(session(value), value.environment, value.tenantId, value.tokenIdentityMarker)
+    ?? `blocked-card-timeline\u0000${value.tokenIdentityMarker}`
 }
 const requestScope = (patch = {}) => {
   const value = current(patch)
@@ -60,7 +75,7 @@ const start = (harness, scope = requestScope()) => {
     && acceptsMountedResponse(harness.mounted, harness.gate, ticket, scope)
     && harness.currentToken === capturedToken
     && harness.currentTokenIdentityMarker === capturedTokenIdentityMarker
-    && cardTimelineSessionReadAllowed(identity.actorId, identity.sessionExpiresAt, identity.environment)
+    && cardTimelineSessionReadAllowed(session(identity), identity.environment, identity.tenantId)
   const settle = (kind) => { if (accepts()) harness.writes[kind] += 1 }
   const invalidateSession = (expectedToken) => {
     if (harness.currentToken === expectedToken) harness.invalidatedSessions += 1
@@ -195,6 +210,7 @@ test('Card History implementation is read-only, atomic, bounded and locally gate
   assert.equal(historyBranch.includes('unfreezeCard'), false)
   assert.equal(historyBranch.includes('provider'), false)
   assert.match(workspace, /cardTimelineSessionReadAllowed/)
+  assert.match(workspace, /cardTimelineSessionScope/)
   assert.match(workspace, /action === 'history' && cardTimelineShouldClearSnapshot\(error\)/)
   assert.match(workspace, /data-card-timeline-blocked="environment-or-session"/)
   assert.match(productionApi, /cardTimeline:[^\n]+apiRequest<string>\([^\n]+key,'GET',undefined/)
@@ -204,13 +220,16 @@ test('Card History implementation is read-only, atomic, bounded and locally gate
   assert.equal(productionApi.slice(productionApi.indexOf('cardTimeline:'), productionApi.indexOf('cardTransactions:')).includes("'POST'"), false)
 })
 
-test('expired/UAT/PRODUCTION sessions yield no request and no UI writes', () => {
+test('expired, cross-tenant, unauthorized, UAT and PRODUCTION sessions yield no request and no UI writes', () => {
   for (const value of [
     current({ sessionExpiresAt: '2020-01-01T00:00:00.000Z' }),
+    current({ tenantId: 'tenant-2' }),
+    current({ permissions: ['platform:tenants:write'] }),
+    current({ accessToken: '   ' }),
     current({ environment: 'UAT' }),
     current({ environment: 'PRODUCTION' }),
   ]) {
-    const allowed = cardTimelineSessionReadAllowed(value.actorId, value.sessionExpiresAt, value.environment)
+    const allowed = cardTimelineSessionReadAllowed(session(value), value.environment, value.tenantId)
     const effects = { requests: 0, writes: 0 }
     if (allowed) {
       effects.requests += 1

@@ -97,6 +97,7 @@ import {
   cardTimelineCollectionScope,
   cardTimelineRequestScope,
   cardTimelineSessionReadAllowed,
+  cardTimelineSessionScope,
   cardTimelineShouldClearSnapshot,
   cardTimelineShouldInvalidateSession,
   createAdminCardTimelineFeed,
@@ -564,7 +565,10 @@ function CardWorkspace({ session, tenantId, mode, invalidateSession }: { session
     tokenIdentity.current = { token: session.accessToken, marker: crypto.randomUUID() }
   }
   const tokenMarker = tokenIdentity.current.marker
-  const baseScope = `${cardWorkspaceBaseScope(session.user.id, session.expiresAt, tenantId, source, mode)}\u0000${tokenMarker}`
+  const timelineSessionScope = cardTimelineSessionScope(session, runtimeConfig.environment, tenantId, tokenMarker)
+  const baseScope = mode === 'history'
+    ? timelineSessionScope ?? `blocked-card-timeline\u0000${tokenMarker}`
+    : `${cardWorkspaceBaseScope(session.user.id, session.expiresAt, tenantId, source, mode)}\u0000${tokenMarker}`
   const { mounted, requestAbort: transactionAbort, requestGate } = useScopedRequestLifecycle(baseScope)
   const stateScope = useRef(baseScope)
   const currentToken = useRef(session.accessToken)
@@ -577,7 +581,7 @@ function CardWorkspace({ session, tenantId, mode, invalidateSession }: { session
   const visibleTransactionFeed = transactionFeed.scope === collectionScope
     ? transactionFeed
     : createCardTransactionFeed(collectionScope)
-  const historySessionAllowed = cardTimelineSessionReadAllowed(session.user.id, session.expiresAt, source)
+  const historySessionAllowed = timelineSessionScope !== null
   const workspaceReadAllowed = mode !== 'history' || historySessionAllowed
 
   const run = async (action: CardWorkspaceAction, cursor: string | null = null) => {
@@ -594,7 +598,7 @@ function CardWorkspace({ session, tenantId, mode, invalidateSession }: { session
       setTransactionsLoaded(false)
       return
     }
-    if (action === 'history' && !cardTimelineSessionReadAllowed(session.user.id, session.expiresAt, source)) {
+    if (action === 'history' && !cardTimelineSessionReadAllowed(session, runtimeConfig.environment, tenantId)) {
       abortCurrentRequest(transactionAbort)
       invalidateRequests(requestGate.current)
       setBusy('')
@@ -616,7 +620,7 @@ function CardWorkspace({ session, tenantId, mode, invalidateSession }: { session
     const acceptsCurrentCompletion = () => acceptsMountedResponse(mounted.current, requestGate.current, ticket, requestScope)
       && currentToken.current === capturedToken
       && tokenIdentity.current?.marker === capturedTokenMarker
-      && (action !== 'history' || cardTimelineSessionReadAllowed(session.user.id, session.expiresAt, source))
+      && (action !== 'history' || cardTimelineSessionReadAllowed(session, runtimeConfig.environment, tenantId))
     setBusy(action)
     setError('')
     // History refreshes retain the last verified snapshot until every new page is verified.
