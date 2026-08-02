@@ -1,8 +1,9 @@
 import { runtimeConfig } from './runtimeConfig'
-import { adminRoutes, type AdminCardTransactionQuery, type DataSource } from './adminRoutes'
+import { adminRoutes, type AdminCardTransactionQuery, type AdminWalletOperationQuery, type DataSource } from './adminRoutes'
 import { MAX_CARD_WORKSPACE_JSON_BYTES } from './cardWorkspaceContract'
 import { MAX_CARD_TRANSACTION_JSON_BYTES } from './cardTransactionContract'
 import { MAX_TREASURY_RECONCILIATION_JSON_BYTES } from './treasuryReconciliationContract'
+import { MAX_WALLET_OPERATION_LIST_JSON_BYTES } from './walletOperationListContract'
 
 export const DEFAULT_API = runtimeConfig.apiUrl
 export type { DataSource } from './adminRoutes'
@@ -149,7 +150,7 @@ export const productionApi={
  treasuryDailyClosing:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryDailyClosing(tenantId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_RECONCILIATION_JSON_BYTES},signal),
  accounts:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<WalletAccount[]>(`/admin/tenants/${tenantId}/ledger/accounts?${query(environment)}`,key),
  journals:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Journal[]>(`/admin/tenants/${tenantId}/ledger/journals?${query(environment)}`,key),
- walletOperations:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(adminRoutes.walletOperations(tenantId,environment),key),
+ walletOperations:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,query:AdminWalletOperationQuery,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.walletOperations(tenantId,environment,query),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_WALLET_OPERATION_LIST_JSON_BYTES},signal),
  walletTransactions:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(adminRoutes.walletTransactions(tenantId,environment),key),
  walletOperation:(_base:string,key:string,tenantId:string,operationId:string,environment:DataSource)=>apiRequest<unknown>(adminRoutes.walletOperation(tenantId,operationId,environment),key),
  contamination:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Contamination>(`/admin/tenants/${tenantId}/operations/mock-contamination?${query(environment)}`,key),
