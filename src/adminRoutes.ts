@@ -214,6 +214,8 @@ export const adminRoutes = {
     `/admin/tenants/${segment(tenantId)}`,
   readiness: (tenantId: string) =>
     `${adminRoutes.tenant(tenantId)}/integrations/readiness`,
+  treasuryLiquidity: (tenantId: string, environment: Extract<DataSource, 'SANDBOX' | 'TEST'>) =>
+    `${adminRoutes.tenant(tenantId)}/settlement/liquidity?${environmentQuery(environment)}`,
   treasuryReconciliation: (tenantId: string, environment: Extract<DataSource, 'SANDBOX' | 'TEST'>) =>
     `${adminRoutes.tenant(tenantId)}/settlement/reconciliation?${environmentQuery(environment)}`,
   treasuryTrialBalance: (tenantId: string, environment: Extract<DataSource, 'SANDBOX' | 'TEST'>) =>

@@ -3,6 +3,7 @@ import type { DataSource } from './adminRoutes.ts'
 export const MAX_TREASURY_RECONCILIATION_JSON_BYTES = 524_288
 export const MAX_TREASURY_RECONCILIATION_JSON_DEPTH = 16
 export const MAX_TREASURY_RECONCILIATION_ROWS = 200
+export const MAX_TREASURY_LIQUIDITY_ROWS = 50
 
 const RECONCILIATION_FIELDS = Object.freeze([
   'generatedAt',
@@ -39,6 +40,22 @@ export type TreasuryBalance = Readonly<{
   balanced: boolean
 }>
 
+export type TreasuryLiquidityPosition = Readonly<{
+  assetCode: string
+  availableBalance: string
+  authorizationHold: string
+  sponsorReserve: string
+  requiredReserve: string
+  pendingSettlement: string
+  liquidityRatio: string | null
+  reserveBreached: boolean
+}>
+
+export type TreasuryLiquiditySnapshot = Readonly<{
+  generatedAt: string
+  positions: readonly TreasuryLiquidityPosition[]
+}>
+
 export type TreasuryReconciliationSummary = Readonly<{
   generatedAt: string
   status: 'MATCHED' | 'DISCREPANCY' | 'NO_DATA'
@@ -68,6 +85,7 @@ export type TreasuryDailyClosingSummary = Readonly<{
 }>
 
 type ContractCode =
+  | 'INVALID_LIQUIDITY'
   | 'INVALID_RECONCILIATION'
   | 'INVALID_TRIAL_BALANCE'
   | 'INVALID_DAILY_CLOSING'
@@ -79,6 +97,7 @@ export class TreasuryReconciliationContractError extends Error {
 
   constructor(code: ContractCode) {
     super({
+      INVALID_LIQUIDITY: 'Treasury liquidity response could not be verified',
       INVALID_RECONCILIATION: 'Treasury reconciliation response could not be verified',
       INVALID_TRIAL_BALANCE: 'Treasury trial balance response could not be verified',
       INVALID_DAILY_CLOSING: 'Treasury daily closing response could not be verified',
@@ -189,9 +208,36 @@ const decimal = (source: OwnData, key: string, code: ContractCode): string => {
   return /^-?(0|[1-9][0-9]*)(\.[0-9]+)?$/.test(value) ? value : invalid(code)
 }
 
+const decimalParts = (value: string): Readonly<{ negative: boolean; integer: string; fraction: string }> => {
+  const match = /^(-?)([0-9]+)(?:\.([0-9]+))?$/.exec(value)!
+  const integer = match[2].replace(/^0+(?=\d)/, '')
+  const fraction = (match[3] ?? '').replace(/0+$/, '')
+  const zero = integer === '0' && fraction.length === 0
+  return Object.freeze({ negative: !zero && match[1] === '-', integer, fraction })
+}
+
+const compareDecimal = (left: string, right: string): number => {
+  const a = decimalParts(left)
+  const b = decimalParts(right)
+  if (a.negative !== b.negative) return a.negative ? -1 : 1
+  const direction = a.negative ? -1 : 1
+  if (a.integer.length !== b.integer.length) return a.integer.length < b.integer.length ? -direction : direction
+  if (a.integer !== b.integer) return a.integer < b.integer ? -direction : direction
+  const width = Math.max(a.fraction.length, b.fraction.length)
+  const aFraction = a.fraction.padEnd(width, '0')
+  const bFraction = b.fraction.padEnd(width, '0')
+  if (aFraction === bFraction) return 0
+  return aFraction < bFraction ? -direction : direction
+}
+
 const assetCode = (source: OwnData, code: ContractCode): string => {
   const value = text(source, 'assetCode', 12, code)
   return /^[A-Z0-9]{3,12}$/.test(value) ? value : invalid(code)
+}
+
+const liquidityAssetCode = (source: OwnData, code: ContractCode): string => {
+  const value = text(source, 'assetCode', 12, code)
+  return /^[A-Z0-9]{2,12}$/.test(value) ? value : invalid(code)
 }
 
 const boundedArray = (value: unknown, code: ContractCode): readonly unknown[] => {
@@ -278,6 +324,53 @@ const parseExternalReconciliation = (value: unknown, code: ContractCode): number
 
 export function parseTreasuryTrialBalance(wireValue: unknown): readonly TreasuryBalance[] {
   return parseTrialBalanceRows(boundedJson(wireValue, 'INVALID_TRIAL_BALANCE'), 'INVALID_TRIAL_BALANCE')
+}
+
+export function parseTreasuryLiquidity(wireValue: unknown): TreasuryLiquiditySnapshot {
+  const code = 'INVALID_LIQUIDITY' as const
+  const source = ownData(boundedJson(wireValue, code), code)
+  exactFields(source, ['generatedAt', 'positions'], code)
+  const rawPositions = boundedArray(ownValue(source, 'positions'), code)
+  if (rawPositions.length > MAX_TREASURY_LIQUIDITY_ROWS) invalid('RESPONSE_LIMIT_EXCEEDED')
+  const positions = rawPositions.map((entry) => {
+    const position = ownData(entry, code)
+    exactFields(position, [
+      'assetCode',
+      'availableBalance',
+      'authorizationHold',
+      'sponsorReserve',
+      'requiredReserve',
+      'pendingSettlement',
+      'liquidityRatio',
+      'reserveBreached',
+    ], code)
+    const requiredReserve = decimal(position, 'requiredReserve', code)
+    const sponsorReserve = decimal(position, 'sponsorReserve', code)
+    const ratioValue = ownValue(position, 'liquidityRatio')
+    const liquidityRatio = ratioValue === null ? null : decimal(position, 'liquidityRatio', code)
+    const zeroRequiredReserve = compareDecimal(requiredReserve, '0') === 0
+    const reserveBreached = bool(position, 'reserveBreached', code)
+    if ((liquidityRatio === null) !== zeroRequiredReserve) invalid(code)
+    if (liquidityRatio !== null && compareDecimal(liquidityRatio, '0') < 0) invalid(code)
+    if (reserveBreached !== (compareDecimal(sponsorReserve, requiredReserve) < 0)) invalid(code)
+    return Object.freeze({
+      assetCode: liquidityAssetCode(position, code),
+      availableBalance: decimal(position, 'availableBalance', code),
+      authorizationHold: decimal(position, 'authorizationHold', code),
+      sponsorReserve,
+      requiredReserve,
+      pendingSettlement: decimal(position, 'pendingSettlement', code),
+      liquidityRatio,
+      reserveBreached,
+    })
+  })
+  for (let index = 1; index < positions.length; index += 1) {
+    if (positions[index - 1].assetCode >= positions[index].assetCode) invalid(code)
+  }
+  return Object.freeze({
+    generatedAt: timestamp(source, 'generatedAt', code),
+    positions: Object.freeze(positions),
+  })
 }
 
 export function parseTreasuryReconciliation(

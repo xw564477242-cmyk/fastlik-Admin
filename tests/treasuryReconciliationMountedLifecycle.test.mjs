@@ -136,15 +136,18 @@ test('tenant, actor, token, environment, page unmount and natural expiry make la
 
 test('production component uses the tested mounted, scope and live-expiry predicates for all completions', () => {
   const source = readFileSync(new URL('../src/TreasuryReconciliationWorkspace.tsx', import.meta.url), 'utf8')
+  const apiSource = readFileSync(new URL('../src/productionApi.ts', import.meta.url), 'utf8')
   assert.match(source, /useScopedRequestLifecycle\(baseScope\)/)
   assert.match(source, /currentBaseScope\.current === baseScope/)
   assert.match(source, /currentAccessToken\.current === session\.accessToken/)
   assert.match(source, /treasurySessionReadAllowed\(session, environment, now\(\)\)/)
   assert.match(source, /acceptsMountedResponse\(lifecycle\.mounted\.current/)
   assert.match(source, /Promise\.allSettled/)
+  assert.match(source, /publishEndpoint\(\{ liquidity:/)
   assert.match(source, /publishEndpoint\(\{ reconciliation:/)
   assert.match(source, /publishEndpoint\(\{ trialBalance:/)
   assert.match(source, /publishEndpoint\(\{ dailyClosing:/)
   assert.match(source, /controller\.signal/)
   assert.equal(source.includes("method:'POST'"), false)
+  assert.match(apiSource, /treasuryLiquidity:[^\n]+,'GET',undefined,\{format:'bounded-text'/)
 })
