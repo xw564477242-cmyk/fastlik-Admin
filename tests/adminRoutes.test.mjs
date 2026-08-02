@@ -9,6 +9,13 @@ const signedCursor = (id = 'txn-2') => Buffer.from(JSON.stringify({
   m: 'b'.repeat(43),
 })).toString('base64url')
 
+const timelineCursor = (id = 'evt-2') => `${Buffer.from(JSON.stringify({
+  v: 1,
+  t: '2026-07-31T00:00:00.000Z',
+  k: 'EVENT',
+  i: id,
+})).toString('base64url')}.${Buffer.alloc(32, 1).toString('base64url')}`
+
 test('wallet routes keep tenant and environment boundaries immutable', () => {
   const tenantId = 'tenant/acme?environment=PRODUCTION'
 
@@ -34,7 +41,8 @@ test('card lifecycle routes encode identifiers and cannot change endpoint shape'
 
   assert.equal(adminRoutes.card(tenantId, cardId), root)
   assert.equal(adminRoutes.cardBalance(tenantId, cardId), `${root}/balance`)
-  assert.equal(adminRoutes.cardTimeline(tenantId, cardId), `${root}/timeline`)
+  assert.equal(adminRoutes.cardTimeline(tenantId, cardId), `${root}/timeline?limit=25`)
+  assert.equal(adminRoutes.cardTimeline(tenantId, cardId, timelineCursor()), `${root}/timeline?limit=25&cursor=${timelineCursor()}`)
   assert.equal(
     adminRoutes.cardTransactions(tenantId, cardId, {
       status: 'SETTLED', type: 'SETTLEMENT', currency: 'USD', from: '2026-07-01', to: '2026-07-31', limit: 25,
@@ -44,6 +52,19 @@ test('card lifecycle routes encode identifiers and cannot change endpoint shape'
   assert.equal(adminRoutes.cardTransaction(tenantId, cardId, 'txn/1?internal=true'), `${root}/transactions/txn%2F1%3Finternal%3Dtrue`)
   assert.equal(adminRoutes.freezeCard(tenantId, cardId), `${root}/freeze`)
   assert.equal(adminRoutes.unfreezeCard(tenantId, cardId), `${root}/unfreeze`)
+})
+
+test('Card timeline route fails closed on malformed or non-canonical Backend cursors', () => {
+  assert.throws(() => adminRoutes.cardTimeline('tenant-1', 'card-1', 'cursor?other=1'), /cursor is invalid/)
+  assert.throws(() => adminRoutes.cardTimeline('tenant-1', 'card-1', 'a'.repeat(2049)), /cursor is invalid/)
+  const wrongShape = `${Buffer.from(JSON.stringify({
+    v: 1,
+    t: '2026-07-31T00:00:00.000Z',
+    k: 'EVENT',
+    i: 'evt-2',
+    extra: true,
+  })).toString('base64url')}.${Buffer.alloc(32, 1).toString('base64url')}`
+  assert.throws(() => adminRoutes.cardTimeline('tenant-1', 'card-1', wrongShape), /cursor is invalid/)
 })
 
 test('Card transaction route emits only Backend-supported filters and caps pages and cursors', () => {

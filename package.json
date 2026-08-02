@@ -13,7 +13,9 @@
     "test:cloudflare": "node scripts/verify-cloudflare.mjs",
     "test:admin-kyc:sandbox": "VITE_FASTLINK_API_URL=/api VITE_FASTLINK_ENVIRONMENT=SANDBOX node --experimental-strip-types --test tests/adminKycContract.test.mjs tests/adminKycMountedLifecycle.test.mjs",
     "test:admin-kyc:test": "VITE_FASTLINK_API_URL=/api VITE_FASTLINK_ENVIRONMENT=TEST node --experimental-strip-types --test tests/adminKycContract.test.mjs tests/adminKycMountedLifecycle.test.mjs",
-    "evidence:card-transactions": "node --experimental-strip-types scripts/write-card-transaction-evidence.mjs && node --experimental-strip-types scripts/verify-card-transaction-evidence.mjs"
+    "evidence:card-transactions": "node --experimental-strip-types scripts/write-card-transaction-evidence.mjs && node --experimental-strip-types scripts/verify-card-transaction-evidence.mjs",
+    "evidence:card-timeline": "node --experimental-strip-types scripts/write-card-timeline-evidence.mjs && node --experimental-strip-types scripts/verify-card-timeline-evidence.mjs",
+    "test:card-timeline": "node --experimental-strip-types --test tests/adminRoutes.test.mjs tests/cardTimelineContract.test.mjs tests/cardTimelineMountedLifecycle.test.mjs tests/cardWorkspaceContract.test.mjs"
   },
   "dependencies": {
     "lucide-react": "0.468.0",

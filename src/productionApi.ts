@@ -2,6 +2,7 @@ import { runtimeConfig } from './runtimeConfig'
 import { adminRoutes, type AdminCardTransactionQuery, type AdminWalletOperationQuery, type DataSource } from './adminRoutes'
 import { MAX_CARD_WORKSPACE_JSON_BYTES } from './cardWorkspaceContract'
 import { MAX_CARD_TRANSACTION_JSON_BYTES } from './cardTransactionContract'
+import { MAX_ADMIN_CARD_TIMELINE_JSON_BYTES } from './cardTimelineContract'
 import { MAX_TREASURY_RECONCILIATION_JSON_BYTES } from './treasuryReconciliationContract'
 import { MAX_WALLET_OPERATION_LIST_JSON_BYTES } from './walletOperationListContract'
 import { adminKycPath, MAX_ADMIN_KYC_JSON_BYTES, parseAdminKycResponse, type AdminKycEnvironment, type AdminKycRecord } from './adminKycContract'
@@ -162,7 +163,7 @@ export const productionApi={
  adminKyc:async(_base:string,key:string,tenantId:string,environment:AdminKycEnvironment,userId:string,signal?:AbortSignal):Promise<AdminKycRecord>=>parseAdminKycResponse(await apiRequest<string>(adminKycPath(tenantId,userId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_ADMIN_KYC_JSON_BYTES},signal),userId),
  card:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.card(tenantId,cardId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
  cardBalance:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.cardBalance(tenantId,cardId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
- cardTimeline:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.cardTimeline(tenantId,cardId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
+ cardTimeline:(_base:string,key:string,tenantId:string,cardId:string,cursor?:string,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.cardTimeline(tenantId,cardId,cursor),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_ADMIN_CARD_TIMELINE_JSON_BYTES},signal),
  cardTransactions:(_base:string,key:string,tenantId:string,cardId:string,query:AdminCardTransactionQuery,cursor?:string,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.cardTransactions(tenantId,cardId,query,cursor),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_TRANSACTION_JSON_BYTES},signal),
  cardTransaction:(_base:string,key:string,tenantId:string,cardId:string,transactionId:string,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.cardTransaction(tenantId,cardId,transactionId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_TRANSACTION_JSON_BYTES},signal),
  freezeCard:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.freezeCard(tenantId,cardId),key,'POST',{idempotencyKey:crypto.randomUUID()},{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),

@@ -1,4 +1,9 @@
 import type { DataSource } from './adminRoutes'
+import {
+  MAX_ADMIN_CARD_TIMELINE_ITEMS,
+  parseAdminCardTimelinePage,
+  type AdminCardTimelineEvent,
+} from './cardTimelineContract.ts'
 
 export type CardWorkspaceMode = 'card' | 'history'
 export type CardWorkspaceAction = 'read' | 'balance' | 'freeze' | 'unfreeze' | 'history' | 'transactions'
@@ -27,15 +32,7 @@ export type AdminCardDetail = Readonly<{
   balance: AdminCardBalance | null
 }>
 
-export type CardTimelineItem = Readonly<{
-  kind?: string | number | boolean | null
-  action?: string | number | boolean | null
-  eventType?: string | number | boolean | null
-  fromStatus?: string | number | boolean | null
-  toStatus?: string | number | boolean | null
-  source?: string | number | boolean | null
-  createdAt?: string | number | boolean | null
-}>
+export type CardTimelineItem = AdminCardTimelineEvent
 
 export type CardWorkspaceView =
   | { kind: 'CARD'; value: AdminCardDetail; empty: false; truncated: false }
@@ -49,7 +46,7 @@ export type CardWorkspaceDisplayState = {
   error: string
 }
 
-export const MAX_CARD_TIMELINE_ITEMS = 200
+export const MAX_CARD_TIMELINE_ITEMS = MAX_ADMIN_CARD_TIMELINE_ITEMS
 export const MAX_CARD_WORKSPACE_JSON_BYTES = 262_144
 export const MAX_CARD_WORKSPACE_JSON_DEPTH = 16
 
@@ -205,31 +202,6 @@ const publicCard = (value: unknown, expectedCardId: string): AdminCardDetail => 
   })
 }
 
-const optionalScalar = (target: CardTimelineItem, source: OwnData, key: keyof CardTimelineItem): void => {
-  if (!hasOwnValue(source, key)) return
-  const value = ownValue(source, key)
-  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    ;(target as Record<string, unknown>)[key] = value
-  }
-}
-
-const publicTimeline = (value: unknown, expectedCardId: string): CardWorkspaceView => {
-  if (!Array.isArray(value)) invalid('INVALID_CARD_TIMELINE')
-  const items = value.slice(0, MAX_CARD_TIMELINE_ITEMS).map((entry) => {
-    const source = ordinaryOwnData(entry, 'INVALID_CARD_TIMELINE')
-    if (hasOwnValue(source, 'cardId')) {
-      const cardId = requiredString(source, 'cardId', 'INVALID_CARD_TIMELINE')
-      if (cardId !== expectedCardId) invalid('CARD_ID_MISMATCH')
-    }
-    const result: CardTimelineItem = {}
-    for (const key of ['kind', 'action', 'eventType', 'fromStatus', 'toStatus', 'source', 'createdAt'] as const) {
-      optionalScalar(result, source, key)
-    }
-    return Object.freeze(result)
-  })
-  return { kind: 'TIMELINE', value: items, empty: items.length === 0, truncated: value.length > items.length }
-}
-
 export const cardWorkspaceBaseScope = (
   actorId: string,
   sessionExpiresAt: string,
@@ -258,8 +230,16 @@ export function parseCardWorkspaceResponse(
     : action === 'balance'
       ? 'INVALID_CARD_BALANCE'
       : 'INVALID_CARD_DETAIL'
+  if (action === 'history') {
+    const page = parseAdminCardTimelinePage(wireValue)
+    return {
+      kind: 'TIMELINE',
+      value: [...page.events],
+      empty: page.events.length === 0,
+      truncated: page.nextCursor !== null,
+    }
+  }
   const value = boundedJson(wireValue, code)
-  if (action === 'history') return publicTimeline(value, expectedCardId)
   if (action === 'balance') {
     const source = ordinaryOwnData(value, 'INVALID_CARD_BALANCE')
     if (hasOwnValue(source, 'cardId') && requiredString(source, 'cardId', 'INVALID_CARD_BALANCE') !== expectedCardId) {

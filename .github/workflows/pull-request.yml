@@ -50,10 +50,16 @@ jobs:
         run: npm run test:admin-kyc:sandbox
       - name: Admin KYC mounted safety in TEST
         run: npm run test:admin-kyc:test
+      - name: Admin Card timeline contract
+        run: npm run test:card-timeline
       - name: Verify Admin Card transaction evidence
         env:
           SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: npm run evidence:card-transactions
+      - name: Verify Admin Card timeline evidence
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: npm run evidence:card-timeline
       - name: Repository Subpath Build
         env:
           VITE_FASTLINK_API_URL: https://fastlink-backend-dev-development-a.up.railway.app/api
@@ -129,10 +135,11 @@ jobs:
           SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
-          printf '{"format":"fastlink-admin-pr-evidence-v3","sourceCommit":"%s","environment":"NON_PRODUCTION","adminKycEnvironments":["SANDBOX","TEST"],"adminKycBuilds":{"SANDBOX":"dist-sandbox","TEST":"dist-test"},"adminKycPolicy":{"method":"GET","auth":"ADMIN_BEARER_IN_MEMORY","csrf":"NOT_APPLICABLE_TO_BEARER_GET","providerCalls":0,"writes":0,"current401":"clear-and-scope-bound-session-invalidation","current403Or404":"clear","staleOrUnmounted":"zero-write"},"cardTransactionLifecycleEvidence":"card-transaction-contract-evidence.json"}\n' "$SOURCE_SHA" > build-evidence.json
+          printf '{"format":"fastlink-admin-pr-evidence-v3","sourceCommit":"%s","environment":"NON_PRODUCTION","runtimeEnvironments":["SANDBOX","TEST"],"adminKycEnvironments":["SANDBOX","TEST"],"adminKycBuilds":{"SANDBOX":"dist-sandbox","TEST":"dist-test"},"adminKycPolicy":{"method":"GET","auth":"ADMIN_BEARER_IN_MEMORY","csrf":"NOT_APPLICABLE_TO_BEARER_GET","providerCalls":0,"writes":0,"current401":"clear-and-scope-bound-session-invalidation","current403Or404":"clear","staleOrUnmounted":"zero-write"},"cardTransactionLifecycleEvidence":"card-transaction-contract-evidence.json","cardTimelineLifecycleEvidence":"card-timeline-contract-evidence.json","cardTimelineTokenIdentityBound":true,"cardTimelineSameTenantRequired":true,"cardTimelineRequiredPermission":"admin:read","cardTimelineMatchingSessionInvalidationStatus":[401]}\n' "$SOURCE_SHA" > build-evidence.json
           find dist dist-sandbox dist-test -type f -print0 | sort -z | xargs -0 sha256sum > build-assets.sha256
           sha256sum \
             .github/workflows/pull-request.yml \
+            .gitignore \
             Dockerfile \
             docker-entrypoint.sh \
             package.json \
@@ -141,19 +148,29 @@ jobs:
             src/AdminApp.tsx \
             src/AdminKycPanel.tsx \
             src/adminKycContract.ts \
+            src/adminRoutes.ts \
+            src/cardTimelineContract.ts \
+            src/cardWorkspaceContract.ts \
             src/productionApi.ts \
             src/requestGeneration.ts \
             src/runtimeConfig.ts \
             src/useScopedRequestLifecycle.ts \
             src/cardTransactionContract.ts \
+            tests/adminRoutes.test.mjs \
+            tests/cardTimelineContract.test.mjs \
+            tests/cardTimelineMountedLifecycle.test.mjs \
+            tests/cardWorkspaceContract.test.mjs \
             tests/cardTransactionMountedLifecycle.test.mjs \
             tests/scopedRequestLifecycleMounted.test.mjs \
             tests/adminKycContract.test.mjs \
             tests/adminKycMountedLifecycle.test.mjs \
+            scripts/write-card-timeline-evidence.mjs \
+            scripts/verify-card-timeline-evidence.mjs \
             scripts/write-card-transaction-evidence.mjs \
             scripts/verify-card-transaction-evidence.mjs \
             build-evidence.json \
             build-assets.sha256 \
+            card-timeline-contract-evidence.json \
             card-transaction-contract-evidence.json \
             > build-provenance.sha256
           sha256sum --check build-assets.sha256
@@ -165,6 +182,7 @@ jobs:
           name: fastlink-admin-pr-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             .github/workflows/pull-request.yml
+            .gitignore
             Dockerfile
             docker-entrypoint.sh
             package.json
@@ -176,20 +194,31 @@ jobs:
             src/AdminApp.tsx
             src/AdminKycPanel.tsx
             src/adminKycContract.ts
+            src/adminRoutes.ts
+            src/cardTimelineContract.ts
+            src/cardWorkspaceContract.ts
             src/productionApi.ts
             src/requestGeneration.ts
             src/runtimeConfig.ts
             src/useScopedRequestLifecycle.ts
             src/cardTransactionContract.ts
+            tests/adminRoutes.test.mjs
+            tests/cardTimelineContract.test.mjs
+            tests/cardTimelineMountedLifecycle.test.mjs
+            tests/cardWorkspaceContract.test.mjs
             tests/cardTransactionMountedLifecycle.test.mjs
             tests/scopedRequestLifecycleMounted.test.mjs
             tests/adminKycContract.test.mjs
             tests/adminKycMountedLifecycle.test.mjs
+            scripts/write-card-timeline-evidence.mjs
+            scripts/verify-card-timeline-evidence.mjs
             scripts/write-card-transaction-evidence.mjs
             scripts/verify-card-transaction-evidence.mjs
             build-evidence.json
             build-assets.sha256
+            card-timeline-contract-evidence.json
             card-transaction-contract-evidence.json
             build-provenance.sha256
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 7

@@ -43,6 +43,7 @@ export const ADMIN_CARD_TRANSACTION_TYPES = [
   'REFUND',
 ] as const
 export const MAX_ADMIN_CARD_TRANSACTION_CURSOR_LENGTH = 512
+export const MAX_ADMIN_CARD_TIMELINE_CURSOR_LENGTH = 2_048
 
 export type AdminCardTransactionStatus = (typeof ADMIN_CARD_TRANSACTION_STATUSES)[number]
 export type AdminCardTransactionStatusFilter = (typeof ADMIN_CARD_TRANSACTION_STATUS_FILTERS)[number]
@@ -128,6 +129,43 @@ export const isCanonicalSignedAdminCardTransactionCursor = (cursor: unknown): cu
   }
 }
 
+const canonicalBase64Url = (value: string): Uint8Array | null => {
+  try {
+    if (!/^[A-Za-z0-9_-]+$/.test(value)) return null
+    const base64 = value.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')
+    const binary = atob(padded)
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+    const canonical = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+    return canonical === value ? bytes : null
+  } catch {
+    return null
+  }
+}
+
+export const isCanonicalSignedAdminCardTimelineCursor = (cursor: unknown): cursor is string => {
+  if (typeof cursor !== 'string' || cursor.length === 0 || cursor.length > MAX_ADMIN_CARD_TIMELINE_CURSOR_LENGTH) return false
+  const parts = cursor.split('.')
+  if (parts.length !== 2) return false
+  const payloadBytes = canonicalBase64Url(parts[0])
+  const macBytes = canonicalBase64Url(parts[1])
+  if (!payloadBytes || !macBytes || macBytes.byteLength !== 32) return false
+  try {
+    const payload = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(payloadBytes)) as unknown
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.getPrototypeOf(payload) !== Object.prototype) return false
+    const descriptors = Object.getOwnPropertyDescriptors(payload)
+    if (Object.keys(descriptors).sort().join(',') !== 'i,k,t,v' || Object.keys(descriptors).some((key) => !('value' in descriptors[key]))) return false
+    const record = Object.fromEntries(Object.entries(descriptors).map(([key, descriptor]) => [key, descriptor.value])) as Record<string, unknown>
+    const parsed = typeof record.t === 'string' ? new Date(record.t) : null
+    return record.v === 1
+      && typeof record.i === 'string' && /^[A-Za-z0-9_-]{2,128}$/.test(record.i)
+      && (record.k === 'LIFECYCLE' || record.k === 'EVENT')
+      && Boolean(parsed && !Number.isNaN(parsed.getTime()) && parsed.toISOString() === record.t)
+  } catch {
+    return false
+  }
+}
+
 const cardTransactionQuery = (query: AdminCardTransactionQuery, cursor?: string): string => {
   if (!Number.isInteger(query.limit) || query.limit < 1 || query.limit > 25) throw new Error('Card transaction limit must be between 1 and 25')
   if (!(ADMIN_CARD_TRANSACTION_STATUS_FILTERS as readonly string[]).includes(query.status)) {
@@ -162,6 +200,15 @@ const cardTransactionQuery = (query: AdminCardTransactionQuery, cursor?: string)
   return params.toString()
 }
 
+const cardTimelineQuery = (cursor?: string): string => {
+  if (cursor !== undefined && !isCanonicalSignedAdminCardTimelineCursor(cursor)) {
+    throw new Error('Card timeline cursor is invalid')
+  }
+  const params = new URLSearchParams({ limit: '25' })
+  if (cursor) params.set('cursor', cursor)
+  return params.toString()
+}
+
 export const adminRoutes = {
   tenant: (tenantId: string) =>
     `/admin/tenants/${segment(tenantId)}`,
@@ -186,8 +233,8 @@ export const adminRoutes = {
     `${adminRoutes.tenant(tenantId)}/cards/${segment(cardId)}`,
   cardBalance: (tenantId: string, cardId: string) =>
     `${adminRoutes.card(tenantId, cardId)}/balance`,
-  cardTimeline: (tenantId: string, cardId: string) =>
-    `${adminRoutes.card(tenantId, cardId)}/timeline`,
+  cardTimeline: (tenantId: string, cardId: string, cursor?: string) =>
+    `${adminRoutes.card(tenantId, cardId)}/timeline?${cardTimelineQuery(cursor)}`,
   cardTransactions: (tenantId: string, cardId: string, query: AdminCardTransactionQuery, cursor?: string) =>
     `${adminRoutes.card(tenantId, cardId)}/transactions?${cardTransactionQuery(query, cursor)}`,
   cardTransaction: (tenantId: string, cardId: string, transactionId: string) =>
