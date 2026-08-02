@@ -5,6 +5,7 @@ import { createElement, useRef, useState } from 'react'
 import { act, create } from 'react-test-renderer'
 import {
   adminKycBaseScope,
+  adminKycFailurePolicy,
   adminKycLookupScope,
   adminKycSessionReadAllowed,
 } from '../src/adminKycContract.ts'
@@ -33,7 +34,7 @@ const deferred = () => {
   const promise = new Promise((done, fail) => { resolve = done; reject = fail })
   return { promise, resolve, reject }
 }
-const writes = () => ({ calls: 0, success: 0, error: 0, finally: 0, controllers: [] })
+const writes = () => ({ calls: 0, success: 0, error: 0, finally: 0, cleared: 0, invalidated: 0, controllers: [] })
 
 function MountedKycProbe({ identity, runtimeEnvironment, tenantId, userId, tab = 'user', pending, clock, recorded, initialSnapshot = 'PENDING' }) {
   const tokenIdentity = useRef(null)
@@ -69,7 +70,14 @@ function MountedKycProbe({ identity, runtimeEnvironment, tenantId, userId, tab =
     setBusy(true)
     pending.promise.then(
       (value) => { if (isCurrent()) { recorded.success += 1; setResult(value) } },
-      () => { if (isCurrent()) { recorded.error += 1; setResult((current) => current) } },
+      (reason) => {
+        if (isCurrent()) {
+          recorded.error += 1
+          const policy = adminKycFailurePolicy(reason)
+          if (policy.clearSnapshot) { recorded.cleared += 1; setResult('CLEARED') }
+          if (policy.invalidateSession) recorded.invalidated += 1
+        }
+      },
     ).finally(() => { if (isCurrent()) { recorded.finally += 1; setBusy(false) } })
   }
   const changeLookup = () => {
@@ -92,7 +100,7 @@ const mount = async (props) => {
 const click = async (renderer, id = 'start') => act(async () => renderer.root.findByProps({ id }).props.onClick())
 const settle = async (pending, outcome, value = 'APPROVED') => act(async () => {
   if (outcome === 'success') pending.resolve(value)
-  else pending.reject(new Error('private upstream failure'))
+  else pending.reject(value instanceof Error ? value : new Error('private upstream failure'))
   await pending.promise.catch(() => undefined)
   await Promise.resolve()
   await Promise.resolve()
@@ -125,7 +133,7 @@ for (const environment of ['SANDBOX', 'TEST']) {
 }
 
 test('repeat query aborts the old request and its late success, error and finally perform zero writes', async () => {
-  for (const outcome of ['success', 'error']) {
+  for (const outcome of ['success', 'error', '401']) {
     const first = deferred()
     const second = deferred()
     const recorded = writes()
@@ -137,15 +145,15 @@ test('repeat query aborts the old request and its late success, error and finall
     await act(async () => renderer.update(createElement(MountedKycProbe, { ...props, pending: second })))
     await click(renderer)
     assert.equal(oldController.signal.aborted, true)
-    await settle(first, outcome)
-    assert.deepEqual({ success: recorded.success, error: recorded.error, finally: recorded.finally }, { success: 0, error: 0, finally: 0 })
+    await settle(first, outcome, outcome === '401' ? Object.assign(new Error('private auth detail'), { status: 401 }) : 'APPROVED')
+    assert.deepEqual({ success: recorded.success, error: recorded.error, finally: recorded.finally, cleared: recorded.cleared, invalidated: recorded.invalidated }, { success: 0, error: 0, finally: 0, cleared: 0, invalidated: 0 })
     await act(async () => renderer.unmount())
   }
 })
 
 test('lookup, session, token, tenant, environment, tab, expiry and mount changes reject every late completion', async () => {
   for (const invalidation of ['lookup', 'session', 'token', 'tenant', 'environment', 'tab', 'expiry', 'unmount']) {
-    for (const outcome of ['success', 'error']) {
+    for (const outcome of ['success', 'error', '401']) {
       const pending = deferred()
       const recorded = writes()
       const clock = { now: Date.parse('2026-08-02T00:00:00.000Z') }
@@ -175,10 +183,29 @@ test('lookup, session, token, tenant, environment, tab, expiry and mount changes
         await act(async () => renderer.update(createElement(MountedKycProbe, next)))
       }
       if (invalidation !== 'expiry') assert.equal(oldController.signal.aborted, true)
-      await settle(pending, outcome)
-      assert.deepEqual({ success: recorded.success, error: recorded.error, finally: recorded.finally }, { success: 0, error: 0, finally: 0 })
+      await settle(pending, outcome, outcome === '401' ? Object.assign(new Error('private auth detail'), { status: 401 }) : 'APPROVED')
+      assert.deepEqual({ success: recorded.success, error: recorded.error, finally: recorded.finally, cleared: recorded.cleared, invalidated: recorded.invalidated }, { success: 0, error: 0, finally: 0, cleared: 0, invalidated: 0 })
       if (invalidation !== 'unmount') await act(async () => renderer.unmount())
     }
+  }
+})
+
+test('current 401, 403 and 404 clear old KYC data and only current 401 invalidates the session', async () => {
+  for (const status of [401, 403, 404]) {
+    const pending = deferred()
+    const recorded = writes()
+    const renderer = await mount({
+      identity: session(), runtimeEnvironment: 'TEST', tenantId: 'tenant-1', userId: 'user-1', pending,
+      clock: { now: Date.parse('2026-08-02T00:00:00.000Z') }, recorded, initialSnapshot: 'APPROVED',
+    })
+    await click(renderer)
+    await settle(pending, 'error', Object.assign(new Error('private failure detail'), { status }))
+    assert.equal(renderer.root.findByType('kyc-probe').props.result, 'CLEARED')
+    assert.deepEqual(
+      { error: recorded.error, finally: recorded.finally, cleared: recorded.cleared, invalidated: recorded.invalidated },
+      { error: 1, finally: 1, cleared: 1, invalidated: status === 401 ? 1 : 0 },
+    )
+    await act(async () => renderer.unmount())
   }
 })
 
@@ -219,6 +246,9 @@ test('production panel uses the mounted predicates, abortable reader and exact t
   assert.match(panel, /currentLookupScope\.current === requestScope/)
   assert.match(panel, /currentToken\.current === capturedToken/)
   assert.match(panel, /adminKycSessionReadAllowed/)
+  assert.match(panel, /adminKycFailurePolicy/)
+  assert.match(panel, /if \(policy\.clearSnapshot\) setSnapshot\(null\)/)
+  assert.match(panel, /if \(policy\.invalidateSession\) invalidateSessionRef\.current\(capturedToken\)/)
   assert.match(panel, /acceptsMountedResponse/)
   assert.match(panel, /controller\.signal/)
   assert.match(panel, /EXACT 3 FIELDS/)

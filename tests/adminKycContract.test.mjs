@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   MAX_ADMIN_KYC_JSON_BYTES,
   adminKycBaseScope,
+  adminKycFailurePolicy,
   adminKycLookupScope,
   adminKycPath,
   adminKycSessionReadAllowed,
@@ -109,6 +110,29 @@ test('production, local, UAT, unknown, mismatch, expiry, missing key and wrong t
   assert.equal(adminKycLookupScope(adminKycBaseScope(identity, 'TEST', 'tenant-1', 'user', now), 'user:one'), null)
 })
 
+test('401, 403 and 404 clear old KYC data while only 401 invalidates the current Admin session', () => {
+  for (const status of [401, 403, 404]) {
+    const failure = Object.assign(new Error('private upstream detail'), { status })
+    assert.deepEqual(adminKycFailurePolicy(failure), {
+      status,
+      clearSnapshot: true,
+      invalidateSession: status === 401,
+    })
+  }
+  for (const status of [0, 400, 408, 500]) {
+    assert.deepEqual(adminKycFailurePolicy(Object.assign(new Error('safe'), { status })), {
+      status,
+      clearSnapshot: false,
+      invalidateSession: false,
+    })
+  }
+  assert.deepEqual(adminKycFailurePolicy(new Error('401')), {
+    status: null,
+    clearSnapshot: false,
+    invalidateSession: false,
+  })
+})
+
 test('productionApi exposes only the bounded exact Admin KYC reader and removes the broad user reader', () => {
   const source = readFileSync(new URL('../src/productionApi.ts', import.meta.url), 'utf8')
   assert.match(source, /adminKyc:async/)
@@ -116,4 +140,33 @@ test('productionApi exposes only the bounded exact Admin KYC reader and removes 
   assert.match(source, /parseAdminKycResponse/)
   assert.match(source, /format:'bounded-text',maxBytes:MAX_ADMIN_KYC_JSON_BYTES/)
   assert.equal(/\n user:/.test(source), false)
+})
+
+test('Admin KYC uses the existing memory-only Admin bearer GET without cookie or CSRF authority', () => {
+  const api = readFileSync(new URL('../src/productionApi.ts', import.meta.url), 'utf8')
+  const app = readFileSync(new URL('../src/AdminApp.tsx', import.meta.url), 'utf8')
+  assert.match(api, /credentials:'omit'/)
+  assert.match(api, /Authorization:`Bearer \$\{token\}`/)
+  assert.match(api, /adminKyc:async\([\s\S]*?,'GET',undefined/)
+  assert.equal(/X-CSRF-Token/i.test(api), false)
+  assert.match(app, /useState<AdminSession \| null>\(null\)/)
+  assert.equal(/localStorage|sessionStorage|document\.cookie/.test(app), false)
+})
+
+test('PR gate runs Admin KYC in SANDBOX and TEST and hashes every KYC control file', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8')
+  for (const script of ['test:admin-kyc:sandbox', 'test:admin-kyc:test']) assert.match(workflow, new RegExp(script))
+  for (const file of [
+    'src/AdminKycPanel.tsx',
+    'src/adminKycContract.ts',
+    'src/productionApi.ts',
+    'tests/adminKycContract.test.mjs',
+    'tests/adminKycMountedLifecycle.test.mjs',
+  ]) {
+    assert.match(workflow, new RegExp(file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  }
+  assert.match(workflow, /fastlink-admin-pr-evidence-v3/)
+  assert.match(workflow, /VITE_FASTLINK_ENVIRONMENT: TEST/)
+  assert.match(workflow, /dist-test/)
+  assert.match(workflow, /build-assets\.sha256/)
 })

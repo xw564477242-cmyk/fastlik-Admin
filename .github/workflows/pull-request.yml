@@ -30,15 +30,26 @@ jobs:
           cache: npm
       - name: Dependency Install
         run: npm ci
-      - name: Type Check and Build
+      - name: SANDBOX Type Check and Build
         env:
           VITE_FASTLINK_API_URL: https://fastlink-backend-dev-development-a.up.railway.app/api
           VITE_FASTLINK_ENVIRONMENT: SANDBOX
           VITE_FASTLINK_BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           VITE_PUBLIC_BASE: /
-        run: npm run build
+        run: npm run build -- --outDir dist-sandbox
+      - name: TEST Type Check and Build
+        env:
+          VITE_FASTLINK_API_URL: https://fastlink-backend-dev-development-a.up.railway.app/api
+          VITE_FASTLINK_ENVIRONMENT: TEST
+          VITE_FASTLINK_BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          VITE_PUBLIC_BASE: /
+        run: npm run build -- --outDir dist-test
       - name: Production and Dev Contract Tests
         run: npm test && npm run test:dev
+      - name: Admin KYC mounted safety in SANDBOX
+        run: npm run test:admin-kyc:sandbox
+      - name: Admin KYC mounted safety in TEST
+        run: npm run test:admin-kyc:test
       - name: Verify Admin Card transaction evidence
         env:
           SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -78,6 +89,34 @@ jobs:
           grep -F 'environment: "SANDBOX"' <<<"$runtime"
           grep -F 'apiUrl: "https://fastlink-backend-dev-development-a.up.railway.app/api"' <<<"$runtime"
           grep -F "buildSha: \"$RELEASE_SHA\"" <<<"$runtime"
+      - name: TEST Container Runtime Contract
+        shell: bash
+        env:
+          IMAGE: fastlink-admin-test:${{ github.event.pull_request.head.sha || github.sha }}
+          RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          docker build \
+            --build-arg VITE_FASTLINK_API_URL=https://fastlink-backend-dev-development-a.up.railway.app/api \
+            --build-arg VITE_FASTLINK_ENVIRONMENT=TEST \
+            --build-arg VITE_PUBLIC_BASE=/ \
+            --build-arg RAILWAY_GIT_COMMIT_SHA="$RELEASE_SHA" \
+            --tag "$IMAGE" .
+          docker run --detach --rm --name fastlink-admin-test-gate \
+            --publish 127.0.0.1:18081:8080 \
+            --env VITE_FASTLINK_API_URL=https://fastlink-backend-dev-development-a.up.railway.app/api \
+            --env VITE_FASTLINK_ENVIRONMENT=TEST \
+            --env RAILWAY_GIT_COMMIT_SHA="$RELEASE_SHA" \
+            "$IMAGE"
+          trap 'docker stop fastlink-admin-test-gate >/dev/null 2>&1 || true' EXIT
+          for _ in {1..30}; do
+            curl --fail --silent http://127.0.0.1:18081/healthz && break
+            sleep 1
+          done
+          runtime="$(curl --fail --silent http://127.0.0.1:18081/runtime-config.js)"
+          grep -F 'environment: "TEST"' <<<"$runtime"
+          grep -F 'apiUrl: "https://fastlink-backend-dev-development-a.up.railway.app/api"' <<<"$runtime"
+          grep -F "buildSha: \"$RELEASE_SHA\"" <<<"$runtime"
       - name: Secret Scan
         shell: bash
         run: |
@@ -90,22 +129,34 @@ jobs:
           SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
-          printf '{"format":"fastlink-admin-pr-evidence-v2","sourceCommit":"%s","environment":"NON_PRODUCTION","cardTransactionLifecycleEvidence":"card-transaction-contract-evidence.json"}\n' "$SOURCE_SHA" > build-evidence.json
+          printf '{"format":"fastlink-admin-pr-evidence-v3","sourceCommit":"%s","environment":"NON_PRODUCTION","adminKycEnvironments":["SANDBOX","TEST"],"adminKycBuilds":{"SANDBOX":"dist-sandbox","TEST":"dist-test"},"adminKycPolicy":{"method":"GET","auth":"ADMIN_BEARER_IN_MEMORY","csrf":"NOT_APPLICABLE_TO_BEARER_GET","providerCalls":0,"writes":0,"current401":"clear-and-scope-bound-session-invalidation","current403Or404":"clear","staleOrUnmounted":"zero-write"},"cardTransactionLifecycleEvidence":"card-transaction-contract-evidence.json"}\n' "$SOURCE_SHA" > build-evidence.json
+          find dist dist-sandbox dist-test -type f -print0 | sort -z | xargs -0 sha256sum > build-assets.sha256
           sha256sum \
-            dist/index.html \
-            dist/runtime-config.js \
+            .github/workflows/pull-request.yml \
+            Dockerfile \
+            docker-entrypoint.sh \
+            package.json \
             package-lock.json \
+            runtime-config.template.js \
             src/AdminApp.tsx \
+            src/AdminKycPanel.tsx \
+            src/adminKycContract.ts \
+            src/productionApi.ts \
             src/requestGeneration.ts \
+            src/runtimeConfig.ts \
             src/useScopedRequestLifecycle.ts \
             src/cardTransactionContract.ts \
             tests/cardTransactionMountedLifecycle.test.mjs \
             tests/scopedRequestLifecycleMounted.test.mjs \
+            tests/adminKycContract.test.mjs \
+            tests/adminKycMountedLifecycle.test.mjs \
             scripts/write-card-transaction-evidence.mjs \
             scripts/verify-card-transaction-evidence.mjs \
             build-evidence.json \
+            build-assets.sha256 \
             card-transaction-contract-evidence.json \
             > build-provenance.sha256
+          sha256sum --check build-assets.sha256
           sha256sum --check build-provenance.sha256
 
       - name: Upload non-production build evidence
@@ -113,17 +164,31 @@ jobs:
         with:
           name: fastlink-admin-pr-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
+            .github/workflows/pull-request.yml
+            Dockerfile
+            docker-entrypoint.sh
+            package.json
             dist/
+            dist-sandbox/
+            dist-test/
             package-lock.json
+            runtime-config.template.js
             src/AdminApp.tsx
+            src/AdminKycPanel.tsx
+            src/adminKycContract.ts
+            src/productionApi.ts
             src/requestGeneration.ts
+            src/runtimeConfig.ts
             src/useScopedRequestLifecycle.ts
             src/cardTransactionContract.ts
             tests/cardTransactionMountedLifecycle.test.mjs
             tests/scopedRequestLifecycleMounted.test.mjs
+            tests/adminKycContract.test.mjs
+            tests/adminKycMountedLifecycle.test.mjs
             scripts/write-card-transaction-evidence.mjs
             scripts/verify-card-transaction-evidence.mjs
             build-evidence.json
+            build-assets.sha256
             card-transaction-contract-evidence.json
             build-provenance.sha256
           if-no-files-found: error

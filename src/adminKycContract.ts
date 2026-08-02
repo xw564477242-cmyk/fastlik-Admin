@@ -9,6 +9,12 @@ export type AdminKycRecord = Readonly<{
   reviewedAt: string | null
 }>
 
+export type AdminKycFailurePolicy = Readonly<{
+  status: number | null
+  clearSnapshot: boolean
+  invalidateSession: boolean
+}>
+
 export type AdminKycSession = Readonly<{
   accessToken: string
   expiresAt: string
@@ -27,6 +33,21 @@ const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.
 const SAFE_ID = /^[A-Za-z0-9_-]{2,128}$/
 
 const validId = (value: unknown): value is string => typeof value === 'string' && SAFE_ID.test(value)
+
+export const adminKycFailurePolicy = (error: unknown): AdminKycFailurePolicy => {
+  if (!error || typeof error !== 'object')
+    return Object.freeze({ status: null, clearSnapshot: false, invalidateSession: false })
+  const descriptor = Object.getOwnPropertyDescriptor(error, 'status')
+  const status = descriptor && 'value' in descriptor && typeof descriptor.value === 'number'
+    ? descriptor.value
+    : null
+  const clearSnapshot = status === 401 || status === 403 || status === 404
+  return Object.freeze({
+    status,
+    clearSnapshot,
+    invalidateSession: status === 401,
+  })
+}
 
 const validRfc3339 = (value: unknown): value is string => {
   if (typeof value !== 'string' || !RFC3339.test(value) || !Number.isFinite(Date.parse(value))) return false
