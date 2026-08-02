@@ -20,7 +20,7 @@ const session = (patch = {}) => ({
     tenantId: 'home-tenant',
     environment: 'TEST',
     roles: ['ADMIN'],
-    permissions: ['kyc:read'],
+    permissions: ['admin:read', 'platform:tenants:write'],
     ...patch,
   },
 })
@@ -88,7 +88,7 @@ test('scope binds verified admin, home and selected tenants, environment, RBAC, 
   const identity = session()
   const base = adminKycBaseScope(identity, 'TEST', 'selected-tenant', 'user', now)
   assert.ok(base)
-  for (const value of ['admin-1', 'home-tenant', 'selected-tenant', 'TEST', 'ADMIN', 'kyc:read', 'user']) assert.match(base, new RegExp(value))
+  for (const value of ['admin-1', 'home-tenant', 'selected-tenant', 'TEST', 'ADMIN', 'admin:read', 'platform:tenants:write', 'user']) assert.match(base, new RegExp(value))
   assert.equal(base.includes(identity.accessToken), false)
   const lookup = adminKycLookupScope(base, 'user-1')
   assert.match(lookup, /user-1/)
@@ -104,6 +104,11 @@ test('production, local, UAT, unknown, mismatch, expiry, missing key and wrong t
   assert.equal(adminKycSessionReadAllowed(identity, 'TEST', 'tenant-1', 'trace', now), false)
   assert.equal(adminKycSessionReadAllowed(identity, 'TEST', 'tenant-1', 'user', Date.parse(identity.expiresAt)), false)
   assert.equal(adminKycSessionReadAllowed({ ...identity, accessToken: '' }, 'TEST', 'tenant-1', 'user', now), false)
+  assert.equal(adminKycSessionReadAllowed(session({ permissions: ['admin:write', 'platform:tenants:write'] }), 'TEST', 'tenant-1', 'user', now), false)
+  assert.equal(adminKycSessionReadAllowed(session({ permissions: ['admin:read'] }), 'TEST', 'tenant-1', 'user', now), false)
+  assert.equal(adminKycSessionReadAllowed(session({ permissions: ['admin:read'] }), 'TEST', 'home-tenant', 'user', now), true)
+  assert.equal(adminKycSessionReadAllowed(session({ roles: [] }), 'TEST', 'home-tenant', 'user', now), false)
+  assert.equal(adminKycSessionReadAllowed(session({ permissions: ['admin:read', 'bad permission'] }), 'TEST', 'home-tenant', 'user', now), false)
   assert.equal(adminKycSessionReadAllowed(identity, 'TEST', 't', 'user', now), false)
   assert.equal(adminKycSessionReadAllowed(identity, 'TEST', 'tenant:one', 'user', now), false)
   assert.equal(adminKycLookupScope(adminKycBaseScope(identity, 'TEST', 'tenant-1', 'user', now), 'u'), null)

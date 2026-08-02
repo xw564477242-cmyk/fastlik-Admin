@@ -10,10 +10,11 @@ test('authenticated Operations route exposes one wallet transaction tab without 
   assert.equal(occurrences(app, "import { WalletTransactionsWorkspace } from './WalletTransactionsWorkspace'"), 1)
   assert.equal(occurrences(app, '<WalletOperationsWorkspace session={session} tenantId={tenantId} />'), 1)
   assert.equal(occurrences(app, '<WalletTransactionsWorkspace session={session} tenantId={tenantId} onUnauthorized={onUnauthorized} />'), 1)
-  assert.match(app, /active === 'operations' && <OperationsWorkspace session=\{session\} tenantId=\{tenantId\} onUnauthorized=\{onLogout\} \/>/)
+  assert.match(app, /active === 'operations' && <OperationsWorkspace session=\{session\} tenantId=\{tenantId\} onUnauthorized=\{onLogout\} invalidateSession=\{invalidateSession\} \/>/)
   assert.match(app, /onClick=\{\(\) => switchTab\('wallet-transactions'\)\}>Wallet Transactions<\/button>/)
   assert.match(app, /const \[tab, setTab\] = useState<[^>]*>\('wallet'\)/)
-  assert.match(app, /const lookupTab = tab === 'operation' \|\| tab === 'user' \|\| tab === 'trace'/)
+  assert.match(app, /const lookupTab = tab === 'operation' \|\| tab === 'trace'/)
+  assert.match(app, /tab === 'user' && <AdminKycPanel/)
 })
 
 test('mounted transaction workspace reuses the supplied session boundary and has no login or route owner', () => {

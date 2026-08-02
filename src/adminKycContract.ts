@@ -31,8 +31,12 @@ export class AdminKycContractError extends Error {}
 
 const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,9})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
 const SAFE_ID = /^[A-Za-z0-9_-]{2,128}$/
+const SAFE_AUTHORITY = /^[A-Za-z0-9:_-]{1,128}$/
 
 const validId = (value: unknown): value is string => typeof value === 'string' && SAFE_ID.test(value)
+const validAuthorities = (value: unknown): value is readonly string[] => Array.isArray(value)
+  && value.length > 0
+  && value.every((item) => typeof item === 'string' && SAFE_AUTHORITY.test(item))
 
 export const adminKycFailurePolicy = (error: unknown): AdminKycFailurePolicy => {
   if (!error || typeof error !== 'object')
@@ -138,6 +142,9 @@ export const adminKycSessionReadAllowed = (
   if (runtimeEnvironment !== 'SANDBOX' && runtimeEnvironment !== 'TEST') return false
   if (session.user.environment !== runtimeEnvironment || tab !== 'user') return false
   if (!validId(session.user.id) || !validId(session.user.tenantId) || !validId(selectedTenantId)) return false
+  if (!validAuthorities(session.user.roles) || !validAuthorities(session.user.permissions)) return false
+  if (!session.user.permissions.includes('admin:read')) return false
+  if (selectedTenantId !== session.user.tenantId && !session.user.permissions.includes('platform:tenants:write')) return false
   if (typeof session.accessToken !== 'string' || session.accessToken.trim().length === 0) return false
   const expiry = Date.parse(session.expiresAt)
   return Number.isFinite(expiry) && expiry > now
