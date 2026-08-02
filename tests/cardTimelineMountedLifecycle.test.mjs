@@ -1,0 +1,157 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import test from 'node:test'
+import {
+  appendAdminCardTimelinePage,
+  cardTimelineCollectionScope,
+  cardTimelineRequestScope,
+  cardTimelineSessionReadAllowed,
+  createAdminCardTimelineFeed,
+  parseAdminCardTimelinePage,
+} from '../src/cardTimelineContract.ts'
+import { cardWorkspaceBaseScope } from '../src/cardWorkspaceContract.ts'
+import {
+  abortCurrentRequest,
+  acceptsMountedResponse,
+  beginRequest,
+  createRequestGate,
+  invalidateRequests,
+  replaceRequestAbort,
+  transitionRequestBaseScope,
+} from '../src/requestGeneration.ts'
+
+const identity = Object.freeze({
+  actorId: 'admin-1',
+  sessionExpiresAt: '2099-01-01T00:00:00.000Z',
+  tenantId: 'tenant-1',
+  environment: 'TEST',
+  cardId: 'card-1',
+})
+const current = (patch = {}) => ({ ...identity, ...patch })
+const baseScope = (patch = {}) => {
+  const value = current(patch)
+  return cardWorkspaceBaseScope(value.actorId, value.sessionExpiresAt, value.tenantId, value.environment, 'history')
+}
+const requestScope = (patch = {}) => {
+  const value = current(patch)
+  return cardTimelineRequestScope(value.actorId, value.sessionExpiresAt, value.tenantId, value.environment, value.cardId)
+}
+
+const mountedHarness = () => ({
+  mounted: true,
+  gate: createRequestGate(baseScope()),
+  slot: { current: null },
+  writes: { success: 0, error: 0, finally: 0 },
+})
+
+const start = (harness, scope = requestScope()) => {
+  const ticket = beginRequest(harness.gate, scope)
+  const controller = replaceRequestAbort(harness.slot)
+  const accepts = () => harness.slot.current === controller
+    && acceptsMountedResponse(harness.mounted, harness.gate, ticket, scope)
+    && cardTimelineSessionReadAllowed(identity.actorId, identity.sessionExpiresAt, identity.environment)
+  const settle = (kind) => { if (accepts()) harness.writes[kind] += 1 }
+  return { accepts, controller, settle }
+}
+
+const event = (id, occurredAt) => ({
+  id, type: 'FROZEN', fromStatus: 'ACTIVE', toStatus: 'FROZEN', occurredAt,
+})
+const cursor = (id, occurredAt) => `${Buffer.from(JSON.stringify({ v: 1, t: occurredAt, k: 'EVENT', i: id })).toString('base64url')}.${Buffer.alloc(32, 1).toString('base64url')}`
+
+test('same-scope manual refresh has a single mounted response writer', () => {
+  const harness = mountedHarness()
+  const first = start(harness)
+  const second = start(harness)
+  assert.equal(first.controller.signal.aborted, true)
+  assert.equal(first.accepts(), false)
+  assert.equal(second.accepts(), true)
+  first.settle('success')
+  first.settle('error')
+  first.settle('finally')
+  second.settle('success')
+  second.settle('finally')
+  assert.deepEqual(harness.writes, { success: 1, error: 0, finally: 1 })
+})
+
+test('actor, session, tenant, environment, Card, unmount and repeat abort late writes', () => {
+  const invalidations = [
+    (harness) => transitionRequestBaseScope(harness.gate, harness.slot, baseScope({ actorId: 'admin-2' })),
+    (harness) => transitionRequestBaseScope(harness.gate, harness.slot, baseScope({ sessionExpiresAt: '2099-02-01T00:00:00.000Z' })),
+    (harness) => transitionRequestBaseScope(harness.gate, harness.slot, baseScope({ tenantId: 'tenant-2' })),
+    (harness) => transitionRequestBaseScope(harness.gate, harness.slot, baseScope({ environment: 'SANDBOX' })),
+    (harness) => { abortCurrentRequest(harness.slot); invalidateRequests(harness.gate) },
+    (harness) => { harness.mounted = false; abortCurrentRequest(harness.slot); invalidateRequests(harness.gate) },
+    (harness) => { start(harness) },
+  ]
+  for (const invalidate of invalidations) {
+    const harness = mountedHarness()
+    const pending = start(harness)
+    invalidate(harness)
+    assert.equal(pending.controller.signal.aborted, true)
+    assert.equal(pending.accepts(), false)
+    pending.settle('success')
+    pending.settle('error')
+    pending.settle('finally')
+    assert.deepEqual(harness.writes, { success: 0, error: 0, finally: 0 })
+  }
+})
+
+test('atomic refresh preserves the previous verified snapshot if a later page fails', () => {
+  const scope = cardTimelineCollectionScope(identity.actorId, identity.sessionExpiresAt, identity.tenantId, identity.environment, identity.cardId)
+  const previousSnapshot = Object.freeze([event('evt-old', '2026-07-30T00:00:00.000Z')])
+  let visibleSnapshot = previousSnapshot
+  let candidate = createAdminCardTimelineFeed(scope)
+  const next = cursor('evt-1', '2026-07-31T00:00:00.000Z')
+  candidate = appendAdminCardTimelinePage(candidate, parseAdminCardTimelinePage(JSON.stringify({
+    events: [event('evt-1', '2026-07-31T00:00:00.000Z')], nextCursor: next,
+  })), null, scope)
+  assert.equal(visibleSnapshot, previousSnapshot)
+
+  assert.throws(() => {
+    const invalidSecondPage = parseAdminCardTimelinePage(JSON.stringify({
+      events: [{ ...event('evt-2', '2026-07-30T23:59:00.000Z'), provider: 'THREDD' }],
+      nextCursor: null,
+    }))
+    candidate = appendAdminCardTimelinePage(candidate, invalidSecondPage, next, scope)
+    visibleSnapshot = candidate.events
+  }, /could not be verified/)
+  assert.equal(visibleSnapshot, previousSnapshot)
+})
+
+test('Card History implementation is read-only, atomic, bounded and locally gated', () => {
+  const source = readFileSync(new URL('../src/AdminApp.tsx', import.meta.url), 'utf8')
+  const productionApi = readFileSync(new URL('../src/productionApi.ts', import.meta.url), 'utf8')
+  const workspace = source.slice(source.indexOf('function CardWorkspace('), source.indexOf('function OperationsWorkspace('))
+  const historyBranch = workspace.slice(workspace.indexOf("if (action === 'history') {"), workspace.indexOf('let value: unknown'))
+
+  assert.match(workspace, /if \(action !== 'history'\) setView\(null\)/)
+  assert.match(historyBranch, /createAdminCardTimelineFeed/)
+  assert.match(historyBranch, /parseAdminCardTimelinePage/)
+  assert.match(historyBranch, /appendAdminCardTimelinePage/)
+  assert.match(historyBranch, /do \{[\s\S]*\} while \(next !== null\)/)
+  assert.equal(historyBranch.includes('setView('), true)
+  assert.equal(historyBranch.includes('setSession('), false)
+  assert.equal(historyBranch.includes('logout'), false)
+  assert.equal(historyBranch.includes('freezeCard'), false)
+  assert.equal(historyBranch.includes('unfreezeCard'), false)
+  assert.match(workspace, /cardTimelineSessionReadAllowed/)
+  assert.match(workspace, /data-card-timeline-blocked="environment-or-session"/)
+  assert.match(productionApi, /cardTimeline:[\s\S]*'GET'/)
+})
+
+test('expired/UAT/PRODUCTION sessions yield no request and no UI writes', () => {
+  for (const value of [
+    current({ sessionExpiresAt: '2020-01-01T00:00:00.000Z' }),
+    current({ environment: 'UAT' }),
+    current({ environment: 'PRODUCTION' }),
+  ]) {
+    const allowed = cardTimelineSessionReadAllowed(value.actorId, value.sessionExpiresAt, value.environment)
+    const effects = { requests: 0, writes: 0 }
+    if (allowed) {
+      effects.requests += 1
+      effects.writes += 1
+    }
+    assert.deepEqual(effects, { requests: 0, writes: 0 })
+  }
+})

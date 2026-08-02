@@ -3,7 +3,6 @@ import test from 'node:test'
 import {
   MAX_CARD_WORKSPACE_JSON_BYTES,
   MAX_CARD_WORKSPACE_JSON_DEPTH,
-  MAX_CARD_TIMELINE_ITEMS,
   cardWorkspaceBaseScope,
   cardWorkspaceRequestScope,
   parseCardWorkspaceResponse,
@@ -167,38 +166,51 @@ test('Card balance omits Provider and internal fields', () => {
   ])
 })
 
-test('Card timeline is empty-safe, bounded and strips payload, actor and operation data', () => {
-  assert.deepEqual(parseCardWorkspaceResponse('history', wire([]), 'card-1'), {
+test('Card timeline consumes only the exact Backend page and event contract', () => {
+  assert.deepEqual(parseCardWorkspaceResponse('history', wire({ events: [], nextCursor: null }), 'card-1'), {
     kind: 'TIMELINE', value: [], empty: true, truncated: false,
   })
 
-  const raw = Array.from({ length: MAX_CARD_TIMELINE_ITEMS + 5 }, (_, index) => ({
+  const parsed = parseCardWorkspaceResponse('history', wire({
+    events: [{
+      id: 'evt-1',
+      type: 'FROZEN',
+      fromStatus: 'ACTIVE',
+      toStatus: 'FROZEN',
+      occurredAt: '2026-07-31T00:00:00.000Z',
+    }],
+    nextCursor: null,
+  }), 'card-1')
+  assert.deepEqual(parsed, {
+    kind: 'TIMELINE',
+    value: [{
+      id: 'evt-1',
+      type: 'FROZEN',
+      fromStatus: 'ACTIVE',
+      toStatus: 'FROZEN',
+      occurredAt: '2026-07-31T00:00:00.000Z',
+    }],
+    empty: false,
+    truncated: false,
+  })
+
+  assert.throws(() => parseCardWorkspaceResponse('history', wire([{
     cardId: 'card-1',
-    kind: index % 2 ? 'EVENT' : 'LIFECYCLE',
+    kind: 'EVENT',
     action: 'FREEZE_CARD',
     fromStatus: 'ACTIVE',
     toStatus: 'FROZEN',
-    createdAt: `2026-07-31T00:${String(index % 60).padStart(2, '0')}:00.000Z`,
+    createdAt: '2026-07-31T00:00:00.000Z',
     actorId: 'admin-private',
     operationId: 'operation-private',
     idempotencyKey: 'key-private',
     payload: { provider: 'THREDD', providerPublicToken: '123456789' },
-  }))
-  const parsed = parseCardWorkspaceResponse('history', wire(raw), 'card-1')
-  assert.equal(parsed.empty, false)
-  assert.equal(parsed.truncated, true)
-  assert.equal(Array.isArray(parsed.value) && parsed.value.length, MAX_CARD_TIMELINE_ITEMS)
-  assert.equal(JSON.stringify(parsed.value).includes('private'), false)
-  assert.equal(JSON.stringify(parsed.value).includes('THREDD'), false)
+  }]), 'card-1'), /could not be verified/)
 })
 
 test('mismatched Card identities are rejected before rendering', () => {
   assert.throws(
     () => parseCardWorkspaceResponse('read', wire({ id: 'card-other', status: 'ACTIVE' }), 'card-1'),
-    /does not match the requested Card ID/,
-  )
-  assert.throws(
-    () => parseCardWorkspaceResponse('history', wire([{ cardId: 'card-other', kind: 'EVENT' }]), 'card-1'),
     /does not match the requested Card ID/,
   )
 })
