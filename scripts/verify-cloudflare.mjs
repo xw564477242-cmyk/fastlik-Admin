@@ -12,6 +12,7 @@ const testConfig = read("wrangler.test.jsonc");
 const devConfig = read("wrangler.dev.jsonc");
 const runtime = read("src/runtimeConfig.ts");
 const index = read("index.html");
+const deployDev = read(".github/workflows/deploy-cloudflare-dev.yml");
 
 assert(index.includes('src="./runtime-config.js"'), "runtime config must load before the Admin app");
 assert(runtime.includes("Cloudflare Admin must use same-origin /api"), "Admin must require same-origin Cloudflare /api");
@@ -26,6 +27,9 @@ assert(testConfig.includes('"FASTLINK_PROXY_ID": "admin-test"'), "Test proxy ide
 assert(devConfig.includes('"name": "fastlink-admin-dev"'), "Dev Worker name must be isolated");
 assert(devConfig.includes('"FASTLINK_ENVIRONMENT": "SANDBOX"'), "Dev Worker must declare SANDBOX");
 assert(devConfig.includes('"FASTLINK_PROXY_ID": "admin-dev"'), "Dev proxy identity must be admin-dev");
+assert(deployDev.includes("for _ in {1..18}") && deployDev.includes("sleep 5"), "Dev rollout verification must tolerate bounded Cloudflare propagation delay");
+assert((deployDev.match(/buildSha/g) ?? []).length >= 4, "Dev rollout must require the exact commit in health and runtime config");
+assert(deployDev.includes("x-fastlink-api-proxy: admin-dev"), "Dev rollout must retain the Admin Dev proxy boundary check");
 
 const dist = join(root, "dist");
 if (statSync(dist, { throwIfNoEntry: false })?.isDirectory()) {
