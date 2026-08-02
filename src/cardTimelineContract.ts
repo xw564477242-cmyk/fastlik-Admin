@@ -333,3 +333,45 @@ export const cardTimelineSessionReadAllowed = (
     && Number.isFinite(expiry)
     && expiry > now
 }
+
+export const cardTimelineShouldClearSnapshot = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false
+  try {
+    const status = Object.getOwnPropertyDescriptor(error, 'status')
+    return Boolean(
+      status
+      && 'value' in status
+      && (status.value === 401 || status.value === 403 || status.value === 404),
+    )
+  } catch {
+    return false
+  }
+}
+
+export function adminCardTimelineContractEvidence(sourceCommit: string) {
+  if (!/^[a-f0-9]{40}$/.test(sourceCommit)) throw new Error('SOURCE_SHA must be a lowercase 40-character commit SHA')
+  return Object.freeze({
+    format: 'fastlink-admin-card-timeline-contract-v1',
+    sourceCommit,
+    environment: 'NON_PRODUCTION',
+    runtimeEnvironments: Object.freeze(['SANDBOX', 'TEST']),
+    productionEnabled: false,
+    method: 'GET',
+    authentication: 'ADMIN_BEARER_MEMORY_ONLY',
+    credentialsMode: 'omit',
+    csrfRequired: false,
+    pageSize: MAX_ADMIN_CARD_TIMELINE_PAGE_SIZE,
+    maximumPages: MAX_ADMIN_CARD_TIMELINE_PAGES,
+    maximumItems: MAX_ADMIN_CARD_TIMELINE_ITEMS,
+    exactPageFields: Object.freeze([...ADMIN_CARD_TIMELINE_PAGE_FIELDS]),
+    exactEventFields: Object.freeze([...ADMIN_CARD_TIMELINE_PUBLIC_FIELDS]),
+    collectionScopeBindings: Object.freeze(['actorId', 'sessionExpiresAt', 'tenantId', 'environment', 'cardId']),
+    requestGenerationBound: true,
+    activeCancellationRequired: true,
+    atomicRefresh: true,
+    clearSnapshotOnCurrentStatus: Object.freeze([401, 403, 404]),
+    staleCompletionWrites: 0,
+    providerCalls: 0,
+    businessWrites: 0,
+  })
+}

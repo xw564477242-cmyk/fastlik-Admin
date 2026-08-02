@@ -6,6 +6,7 @@ import {
   cardTimelineCollectionScope,
   cardTimelineRequestScope,
   cardTimelineSessionReadAllowed,
+  cardTimelineShouldClearSnapshot,
   createAdminCardTimelineFeed,
   parseAdminCardTimelinePage,
 } from '../src/cardTimelineContract.ts'
@@ -122,6 +123,20 @@ test('only unexpired SANDBOX and TEST Admin sessions may read timeline', () => {
   assert.equal(cardTimelineSessionReadAllowed('admin-1', future, 'PRODUCTION'), false)
   assert.equal(cardTimelineSessionReadAllowed('admin-1', '2020-01-01T00:00:00.000Z', 'TEST'), false)
   assert.equal(cardTimelineSessionReadAllowed('bad actor', future, 'TEST'), false)
+})
+
+test('only current authorization/scope terminal statuses clear a verified snapshot', () => {
+  for (const status of [401, 403, 404]) assert.equal(cardTimelineShouldClearSnapshot({ status }), true)
+  for (const status of [0, 400, 408, 409, 429, 500]) assert.equal(cardTimelineShouldClearSnapshot({ status }), false)
+  assert.equal(cardTimelineShouldClearSnapshot(new Error('network')), false)
+
+  let getterCalls = 0
+  const accessor = {}
+  Object.defineProperty(accessor, 'status', {
+    get() { getterCalls += 1; return 401 },
+  })
+  assert.equal(cardTimelineShouldClearSnapshot(accessor), false)
+  assert.equal(getterCalls, 0)
 })
 
 test('non-wire, oversized and deeply nested values fail closed', () => {

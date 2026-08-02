@@ -97,6 +97,7 @@ import {
   cardTimelineCollectionScope,
   cardTimelineRequestScope,
   cardTimelineSessionReadAllowed,
+  cardTimelineShouldClearSnapshot,
   createAdminCardTimelineFeed,
   parseAdminCardTimelinePage,
 } from './cardTimelineContract'
@@ -655,7 +656,10 @@ function CardWorkspace({ session, tenantId, mode }: { session: AdminSession; ten
         }
       }
     } catch (error) {
-      if (acceptsCurrentCompletion()) setError(cardWorkspaceErrorText(error))
+      if (acceptsCurrentCompletion()) {
+        if (action === 'history' && cardTimelineShouldClearSnapshot(error)) setView(null)
+        setError(cardWorkspaceErrorText(error))
+      }
     } finally {
       if (acceptsCurrentCompletion()) setBusy('')
     }

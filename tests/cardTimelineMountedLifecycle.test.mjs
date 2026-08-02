@@ -6,6 +6,7 @@ import {
   cardTimelineCollectionScope,
   cardTimelineRequestScope,
   cardTimelineSessionReadAllowed,
+  cardTimelineShouldClearSnapshot,
   createAdminCardTimelineFeed,
   parseAdminCardTimelinePage,
 } from '../src/cardTimelineContract.ts'
@@ -119,6 +120,27 @@ test('atomic refresh preserves the previous verified snapshot if a later page fa
   assert.equal(visibleSnapshot, previousSnapshot)
 })
 
+test('current 401/403/404 clear the verified snapshot while stale auth errors write nothing', () => {
+  for (const status of [401, 403, 404]) {
+    const harness = mountedHarness()
+    const pending = start(harness)
+    let visibleSnapshot = Object.freeze([event('evt-old', '2026-07-30T00:00:00.000Z')])
+    if (pending.accepts() && cardTimelineShouldClearSnapshot({ status })) visibleSnapshot = null
+    pending.settle('error')
+    assert.equal(visibleSnapshot, null)
+    assert.equal(harness.writes.error, 1)
+  }
+
+  const harness = mountedHarness()
+  const pending = start(harness)
+  let visibleSnapshot = Object.freeze([event('evt-old', '2026-07-30T00:00:00.000Z')])
+  transitionRequestBaseScope(harness.gate, harness.slot, baseScope({ actorId: 'admin-2' }))
+  if (pending.accepts() && cardTimelineShouldClearSnapshot({ status: 401 })) visibleSnapshot = null
+  pending.settle('error')
+  assert.equal(visibleSnapshot.length, 1)
+  assert.deepEqual(harness.writes, { success: 0, error: 0, finally: 0 })
+})
+
 test('Card History implementation is read-only, atomic, bounded and locally gated', () => {
   const source = readFileSync(new URL('../src/AdminApp.tsx', import.meta.url), 'utf8')
   const productionApi = readFileSync(new URL('../src/productionApi.ts', import.meta.url), 'utf8')
@@ -135,9 +157,15 @@ test('Card History implementation is read-only, atomic, bounded and locally gate
   assert.equal(historyBranch.includes('logout'), false)
   assert.equal(historyBranch.includes('freezeCard'), false)
   assert.equal(historyBranch.includes('unfreezeCard'), false)
+  assert.equal(historyBranch.includes('provider'), false)
   assert.match(workspace, /cardTimelineSessionReadAllowed/)
+  assert.match(workspace, /action === 'history' && cardTimelineShouldClearSnapshot\(error\)/)
   assert.match(workspace, /data-card-timeline-blocked="environment-or-session"/)
-  assert.match(productionApi, /cardTimeline:[\s\S]*'GET'/)
+  assert.match(productionApi, /cardTimeline:[^\n]+apiRequest<string>\([^\n]+key,'GET',undefined/)
+  assert.match(productionApi, /credentials:'omit'/)
+  assert.match(productionApi, /Authorization:`Bearer \$\{token\}`/)
+  assert.equal(productionApi.includes("cardTimeline:"), true)
+  assert.equal(productionApi.slice(productionApi.indexOf('cardTimeline:'), productionApi.indexOf('cardTransactions:')).includes("'POST'"), false)
 })
 
 test('expired/UAT/PRODUCTION sessions yield no request and no UI writes', () => {
