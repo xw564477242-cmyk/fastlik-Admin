@@ -409,7 +409,7 @@ function AuthenticatedAdmin({ session, onLogout }: { session: AdminSession; onLo
             <span className="role-badge">{session.user.roles[0] ?? 'ADMIN'}</span>
             <select className="tenant-select" value={tenantId} onChange={(event) => setTenantId(event.target.value)}>{tenants.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.brandName || tenant.legalName}</option>)}</select>
             <label className="search-box"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="筛选当前真实数据…" /></label>
-            <button className="icon-btn" onClick={() => void load()} title="刷新 Railway 数据"><RefreshCw className={busy ? 'spin' : ''} size={18} /></button>
+            <button className="icon-btn" disabled={busy} onClick={() => void load()} title={busy ? 'Railway 数据加载中' : '刷新 Railway 数据'}><RefreshCw className={busy ? 'spin' : ''} size={18} /></button>
             <button className="icon-btn" title="通知中心尚无正式读取合同"><Bell size={18} /></button>
           </div>
         </header>
