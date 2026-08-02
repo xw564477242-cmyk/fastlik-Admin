@@ -40,7 +40,9 @@ test('card lifecycle routes encode identifiers and cannot change endpoint shape'
     '/admin/tenants/tenant%2F..%2F..%2Fother/cards/card%2F123%3Foperation%3Dunfreeze'
 
   assert.equal(adminRoutes.card(tenantId, cardId), root)
-  assert.equal(adminRoutes.cardBalance(tenantId, cardId), `${root}/balance`)
+  assert.equal(adminRoutes.cardSnapshot(tenantId, cardId), `${root}/snapshot`)
+  assert.equal(adminRoutes.cardBalanceSnapshot(tenantId, cardId), `${root}/snapshot/balance`)
+  assert.equal(adminRoutes.cardLimitsSnapshot(tenantId, cardId), `${root}/snapshot/limits`)
   assert.equal(adminRoutes.cardTimeline(tenantId, cardId), `${root}/timeline?limit=25`)
   assert.equal(adminRoutes.cardTimeline(tenantId, cardId, timelineCursor()), `${root}/timeline?limit=25&cursor=${timelineCursor()}`)
   assert.equal(

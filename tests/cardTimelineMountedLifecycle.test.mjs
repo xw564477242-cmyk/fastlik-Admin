@@ -194,7 +194,7 @@ test('Card History implementation is read-only, atomic, bounded and locally gate
   const workspace = source.slice(source.indexOf('function CardWorkspace('), source.indexOf('function OperationsWorkspace('))
   const historyBranch = workspace.slice(workspace.indexOf("if (action === 'history') {"), workspace.indexOf('let value: unknown'))
 
-  assert.match(workspace, /if \(action !== 'history'\) setView\(null\)/)
+  assert.match(workspace, /if \(action !== 'history' && !snapshotAction\) setView\(null\)/)
   assert.match(historyBranch, /createAdminCardTimelineFeed/)
   assert.match(historyBranch, /parseAdminCardTimelinePage/)
   assert.match(historyBranch, /appendAdminCardTimelinePage/)
