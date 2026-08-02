@@ -14,6 +14,7 @@ import {
 } from './requestGeneration'
 import {
   parseTreasuryDailyClosing,
+  parseTreasuryLiquidity,
   parseTreasuryReconciliation,
   parseTreasuryTrialBalance,
   treasuryDashboardScope,
@@ -21,6 +22,7 @@ import {
   treasurySessionReadAllowed,
   type TreasuryBalance,
   type TreasuryDailyClosingSummary,
+  type TreasuryLiquiditySnapshot,
   type TreasuryReconciliationSummary,
 } from './treasuryReconciliationContract'
 import { useScopedRequestLifecycle } from './useScopedRequestLifecycle'
@@ -28,12 +30,15 @@ import { useScopedRequestLifecycle } from './useScopedRequestLifecycle'
 type TreasuryEnvironment = Extract<DataSource, 'SANDBOX' | 'TEST'>
 
 export type TreasuryReconciliationClient = Readonly<{
+  liquidity: (token: string, tenantId: string, environment: TreasuryEnvironment, signal: AbortSignal) => Promise<string>
   reconciliation: (token: string, tenantId: string, environment: TreasuryEnvironment, signal: AbortSignal) => Promise<string>
   trialBalance: (token: string, tenantId: string, environment: TreasuryEnvironment, signal: AbortSignal) => Promise<string>
   dailyClosing: (token: string, tenantId: string, environment: TreasuryEnvironment, signal: AbortSignal) => Promise<string>
 }>
 
 const defaultClient: TreasuryReconciliationClient = Object.freeze({
+  liquidity: (token, tenantId, environment, signal) =>
+    productionApi.treasuryLiquidity(DEFAULT_API, token, tenantId, environment, signal),
   reconciliation: (token, tenantId, environment, signal) =>
     productionApi.treasuryReconciliation(DEFAULT_API, token, tenantId, environment, signal),
   trialBalance: (token, tenantId, environment, signal) =>
@@ -50,6 +55,7 @@ type EndpointState<T> =
 type TreasuryDashboardState = Readonly<{
   scope: string
   busy: boolean
+  liquidity: EndpointState<TreasuryLiquiditySnapshot>
   reconciliation: EndpointState<TreasuryReconciliationSummary>
   trialBalance: EndpointState<readonly TreasuryBalance[]>
   dailyClosing: EndpointState<TreasuryDailyClosingSummary>
@@ -59,6 +65,7 @@ const endpoint = <T,>(status: 'IDLE' | 'LOADING'): EndpointState<T> => Object.fr
 const emptyState = (scope: string, loading = false): TreasuryDashboardState => Object.freeze({
   scope,
   busy: loading,
+  liquidity: endpoint(loading ? 'LOADING' : 'IDLE'),
   reconciliation: endpoint(loading ? 'LOADING' : 'IDLE'),
   trialBalance: endpoint(loading ? 'LOADING' : 'IDLE'),
   dailyClosing: endpoint(loading ? 'LOADING' : 'IDLE'),
@@ -92,6 +99,10 @@ function ReconciliationPanel({ value }: { value: TreasuryReconciliationSummary }
     ['Generated at', value.generatedAt],
   ] as const
   return <article className="panel treasury-summary-panel" data-treasury-panel="reconciliation"><div className="panel-title"><div><h3>Reconciliation Summary</h3><p>只显示已核验汇总，不显示银行、处理商或内部明细字段。</p></div><span className={`treasury-status ${statusTone(value.status)}`}>{value.status}</span></div><dl className="treasury-summary-grid">{rows.map(([label, item]) => <div key={label}><dt>{label}</dt><dd>{item}</dd></div>)}</dl></article>
+}
+
+function LiquidityPanel({ value }: { value: TreasuryLiquiditySnapshot }) {
+  return <article className="panel" data-treasury-panel="liquidity"><div className="panel-title"><div><h3>Liquidity by Asset</h3><p>Backend Settlement liquidity 只读合同 · 不汇总租户、不读取 Provider 字段。</p></div><span className="record-count">{value.positions.length} ASSETS</span></div>{value.positions.length ? <div className="table-wrap"><table><thead><tr><th>Asset</th><th>Available</th><th>Authorization hold</th><th>Sponsor reserve</th><th>Required reserve</th><th>Pending settlement</th><th>Liquidity ratio</th><th>Reserve status</th></tr></thead><tbody>{value.positions.map((position) => <tr key={position.assetCode}><td>{position.assetCode}</td><td>{position.availableBalance}</td><td>{position.authorizationHold}</td><td>{position.sponsorReserve}</td><td>{position.requiredReserve}</td><td>{position.pendingSettlement}</td><td>{position.liquidityRatio === null ? 'N/A' : `${position.liquidityRatio}%`}</td><td><span className={`treasury-status ${position.reserveBreached ? 'blocked' : 'pass'}`}>{position.reserveBreached ? 'BREACHED' : 'HEALTHY'}</span></td></tr>)}</tbody></table></div> : <div className="table-empty">当前作用域没有可核验的 Treasury liquidity 记录。</div>}<p className="treasury-generated-at">Generated at · {value.generatedAt}</p></article>
 }
 
 function TrialBalancePanel({ rows }: { rows: readonly TreasuryBalance[] }) {
@@ -145,10 +156,16 @@ export function TreasuryReconciliationWorkspace({
       && acceptsMountedResponse(lifecycle.mounted.current, lifecycle.requestGate.current, ticket, baseScope)
     setState(emptyState(baseScope, true))
     try {
-      const publishEndpoint = (patch: Partial<Pick<TreasuryDashboardState, 'reconciliation' | 'trialBalance' | 'dailyClosing'>>) => {
+      const publishEndpoint = (patch: Partial<Pick<TreasuryDashboardState, 'liquidity' | 'reconciliation' | 'trialBalance' | 'dailyClosing'>>) => {
         if (!isCurrent()) return
         setState((current) => current.scope === baseScope ? Object.freeze({ ...current, ...patch }) : current)
       }
+      const liquidity = client.liquidity(session.accessToken, tenantId, treasuryEnvironment, controller.signal)
+        .then(parseTreasuryLiquidity)
+        .then(
+          (value) => publishEndpoint({ liquidity: Object.freeze({ status: 'READY', value }) }),
+          (error) => publishEndpoint({ liquidity: Object.freeze({ status: 'ERROR', message: safeError(error) }) }),
+        )
       const reconciliation = client.reconciliation(session.accessToken, tenantId, treasuryEnvironment, controller.signal)
         .then((value) => parseTreasuryReconciliation(value, treasuryEnvironment))
         .then(
@@ -167,7 +184,7 @@ export function TreasuryReconciliationWorkspace({
           (value) => publishEndpoint({ dailyClosing: Object.freeze({ status: 'READY', value }) }),
           (error) => publishEndpoint({ dailyClosing: Object.freeze({ status: 'ERROR', message: safeError(error) }) }),
         )
-      await Promise.allSettled([reconciliation, trialBalance, dailyClosing])
+      await Promise.allSettled([liquidity, reconciliation, trialBalance, dailyClosing])
     } finally {
       if (isCurrent()) setState((current) => current.scope === baseScope ? Object.freeze({ ...current, busy: false }) : current)
     }
@@ -183,6 +200,8 @@ export function TreasuryReconciliationWorkspace({
     {!supportedEnvironment && <section className="unavailable" data-treasury-blocked="environment"><AlertTriangle /><div><h3>Environment Gate Closed</h3><p>本工作区只允许 SANDBOX 与 TEST；不会向 UAT 或 PRODUCTION 发出请求。</p></div></section>}
     {supportedEnvironment && !sessionAllowed && <section className="unavailable" data-treasury-blocked="session"><AlertTriangle /><div><h3>Admin Session Expired</h3><p>当前会话不可继续读取；旧请求完成不会写入页面。</p></div></section>}
     {supportedEnvironment && sessionAllowed && visible.busy && visible.reconciliation.status === 'LOADING' && <section className="empty-state treasury-loading"><LoaderCircle className="spin" /><h3>正在核验只读 Treasury 合同</h3><p>不会读取缓存、原始 Provider 数据或任何生产环境。</p></section>}
+    {visible.liquidity.status === 'READY' && <LiquidityPanel value={visible.liquidity.value} />}
+    {visible.liquidity.status === 'ERROR' && <EndpointFailure title="Liquidity unavailable" message={visible.liquidity.message} />}
     {visible.reconciliation.status === 'READY' && <ReconciliationPanel value={visible.reconciliation.value} />}
     {visible.reconciliation.status === 'ERROR' && <EndpointFailure title="Reconciliation unavailable" message={visible.reconciliation.message} />}
     {visible.trialBalance.status === 'READY' && <TrialBalancePanel rows={visible.trialBalance.value} />}

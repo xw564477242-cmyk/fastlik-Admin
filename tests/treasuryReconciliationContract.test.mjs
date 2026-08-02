@@ -3,6 +3,7 @@ import test from 'node:test'
 import { adminRoutes } from '../src/adminRoutes.ts'
 import {
   parseTreasuryDailyClosing,
+  parseTreasuryLiquidity,
   parseTreasuryReconciliation,
   parseTreasuryTrialBalance,
   treasuryDashboardScope,
@@ -28,6 +29,16 @@ const authorizationHoldChecks = [{
 const clearingDifferenceChecks = [{ assetCode: 'USD', clearingDifference: '-5', expectedAuthorizationHold: '5', matched: true }]
 const journalChecks = [{ assetCode: 'USD', debit: '100', credit: '100', matched: true }]
 const trialBalance = [{ assetCode: 'USD', debit: '100', credit: '100', balanced: true }]
+const liquidity = (positions = [{
+  assetCode: 'USD',
+  availableBalance: '1000.25',
+  authorizationHold: '20',
+  sponsorReserve: '80',
+  requiredReserve: '100',
+  pendingSettlement: '10.5',
+  liquidityRatio: '80',
+  reserveBreached: true,
+}]) => ({ generatedAt: '2026-08-01T00:00:00.000Z', positions })
 
 const reconciliation = (patch = {}) => ({
   generatedAt: '2026-08-01T00:00:00.000Z',
@@ -73,9 +84,38 @@ const dailyClosing = (patch = {}) => ({
 
 test('Treasury routes are immutable SANDBOX/TEST GET targets with encoded tenant scope', () => {
   const tenant = 'tenant/acme?environment=PRODUCTION'
+  assert.equal(adminRoutes.treasuryLiquidity(tenant, 'SANDBOX'), '/admin/tenants/tenant%2Facme%3Fenvironment%3DPRODUCTION/settlement/liquidity?environment=SANDBOX')
   assert.equal(adminRoutes.treasuryReconciliation(tenant, 'TEST'), '/admin/tenants/tenant%2Facme%3Fenvironment%3DPRODUCTION/settlement/reconciliation?environment=TEST')
   assert.equal(adminRoutes.treasuryTrialBalance(tenant, 'SANDBOX'), '/admin/tenants/tenant%2Facme%3Fenvironment%3DPRODUCTION/settlement/trial-balance?environment=SANDBOX')
   assert.equal(adminRoutes.treasuryDailyClosing(tenant, 'TEST'), '/admin/tenants/tenant%2Facme%3Fenvironment%3DPRODUCTION/settlement/daily-closing?environment=TEST')
+})
+
+test('Liquidity parser exposes only the exact bounded per-asset Backend contract', () => {
+  const exact = liquidity([{ ...liquidity().positions[0], assetCode: 'US' }])
+  const snapshot = parseTreasuryLiquidity(JSON.stringify(exact))
+  assert.deepEqual(snapshot, exact)
+  assert.equal(Object.isFrozen(snapshot), true)
+  assert.equal(Object.isFrozen(snapshot.positions), true)
+  assert.equal(Object.isFrozen(snapshot.positions[0]), true)
+  assert.equal('tenantId' in snapshot.positions[0], false)
+  assert.equal('providerAccountRef' in snapshot.positions[0], false)
+})
+
+test('Liquidity parser rejects internal fields, unsafe ordering, overflow and inconsistent reserve states', () => {
+  const row = liquidity().positions[0]
+  assert.throws(() => parseTreasuryLiquidity(JSON.stringify(liquidity([{ ...row, providerAccountRef: 'secret' }]))), /could not be verified/)
+  assert.throws(() => parseTreasuryLiquidity(JSON.stringify(liquidity([row, row]))), /could not be verified/)
+  assert.throws(() => parseTreasuryLiquidity(JSON.stringify(liquidity([
+    { ...row, assetCode: 'USD' },
+    { ...row, assetCode: 'EUR' },
+  ]))), /could not be verified/)
+  assert.throws(() => parseTreasuryLiquidity(JSON.stringify(liquidity(Array.from({ length: 51 }, (_, index) => ({
+    ...row,
+    assetCode: `A${String(index).padStart(2, '0')}`,
+  }))))), /exceeds the local safety limit/)
+  assert.throws(() => parseTreasuryLiquidity(JSON.stringify(liquidity([{ ...row, reserveBreached: false }]))), /could not be verified/)
+  assert.throws(() => parseTreasuryLiquidity(JSON.stringify(liquidity([{ ...row, requiredReserve: '0', liquidityRatio: '0', reserveBreached: false }]))), /could not be verified/)
+  assert.throws(() => parseTreasuryLiquidity(JSON.stringify(liquidity([{ ...row, assetCode: 'U' }]))), /could not be verified/)
 })
 
 test('Reconciliation parser returns only safe summary fields and counts verified exceptions', () => {
