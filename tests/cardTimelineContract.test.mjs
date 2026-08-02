@@ -7,6 +7,7 @@ import {
   cardTimelineRequestScope,
   cardTimelineSessionReadAllowed,
   cardTimelineShouldClearSnapshot,
+  cardTimelineShouldInvalidateSession,
   createAdminCardTimelineFeed,
   parseAdminCardTimelinePage,
 } from '../src/cardTimelineContract.ts'
@@ -59,7 +60,7 @@ test('duplicate and non-monotonic events fail closed within and across pages', (
     event('evt-2', '2026-07-31T00:01:00.000Z'),
   ])), /expected order/)
 
-  const scope = cardTimelineCollectionScope('admin-1', '2099-01-01T00:00:00.000Z', 'tenant-1', 'TEST', 'card-1')
+  const scope = cardTimelineCollectionScope('admin-1', '2099-01-01T00:00:00.000Z', 'tenant-1', 'TEST', 'card-1', 'token-marker-a')
   const firstCursor = cursor('evt-1')
   let feed = appendAdminCardTimelinePage(
     createAdminCardTimelineFeed(scope),
@@ -72,7 +73,7 @@ test('duplicate and non-monotonic events fail closed within and across pages', (
 })
 
 test('signed cursors, request cursor, scope and cursor chain are verified', () => {
-  const scope = cardTimelineCollectionScope('admin-1', '2099-01-01T00:00:00.000Z', 'tenant-1', 'SANDBOX', 'card-1')
+  const scope = cardTimelineCollectionScope('admin-1', '2099-01-01T00:00:00.000Z', 'tenant-1', 'SANDBOX', 'card-1', 'token-marker-a')
   const firstCursor = cursor('evt-1')
   let feed = appendAdminCardTimelinePage(createAdminCardTimelineFeed(scope), parseAdminCardTimelinePage(wire([event()], firstCursor)), null, scope)
   assert.equal(feed.nextCursor, firstCursor)
@@ -86,7 +87,7 @@ test('signed cursors, request cursor, scope and cursor chain are verified', () =
 })
 
 test('client enforces ten pages and 250 events without following an eleventh cursor', () => {
-  const scope = cardTimelineCollectionScope('admin-1', '2099-01-01T00:00:00.000Z', 'tenant-1', 'TEST', 'card-1')
+  const scope = cardTimelineCollectionScope('admin-1', '2099-01-01T00:00:00.000Z', 'tenant-1', 'TEST', 'card-1', 'token-marker-a')
   let feed = createAdminCardTimelineFeed(scope)
   let requested = null
   for (let pageIndex = 0; pageIndex < 10; pageIndex += 1) {
@@ -104,14 +105,15 @@ test('client enforces ten pages and 250 events without following an eleventh cur
   assert.equal(feed.truncated, true)
 })
 
-test('actor, session, tenant, environment and card are bound into collection/request scopes', () => {
-  const base = ['admin-1', '2099-01-01T00:00:00.000Z', 'tenant-1', 'TEST', 'card-1']
+test('actor, session, token identity, tenant, environment and card are bound into collection/request scopes', () => {
+  const base = ['admin-1', '2099-01-01T00:00:00.000Z', 'tenant-1', 'TEST', 'card-1', 'token-marker-a']
   const collection = cardTimelineCollectionScope(...base)
   assert.notEqual(collection, cardTimelineCollectionScope('admin-2', ...base.slice(1)))
   assert.notEqual(collection, cardTimelineCollectionScope(base[0], '2099-02-01T00:00:00.000Z', ...base.slice(2)))
   assert.notEqual(collection, cardTimelineCollectionScope(base[0], base[1], 'tenant-2', ...base.slice(3)))
-  assert.notEqual(collection, cardTimelineCollectionScope(base[0], base[1], base[2], 'SANDBOX', base[4]))
-  assert.notEqual(collection, cardTimelineCollectionScope(...base.slice(0, 4), 'card-2'))
+  assert.notEqual(collection, cardTimelineCollectionScope(base[0], base[1], base[2], 'SANDBOX', ...base.slice(4)))
+  assert.notEqual(collection, cardTimelineCollectionScope(...base.slice(0, 4), 'card-2', base[5]))
+  assert.notEqual(collection, cardTimelineCollectionScope(...base.slice(0, 5), 'token-marker-b'))
   assert.notEqual(collection, cardTimelineRequestScope(...base))
 })
 
@@ -136,7 +138,16 @@ test('only current authorization/scope terminal statuses clear a verified snapsh
     get() { getterCalls += 1; return 401 },
   })
   assert.equal(cardTimelineShouldClearSnapshot(accessor), false)
+  assert.equal(cardTimelineShouldInvalidateSession(accessor), false)
   assert.equal(getterCalls, 0)
+})
+
+test('only an own-data 401 requests matching-session invalidation', () => {
+  assert.equal(cardTimelineShouldInvalidateSession({ status: 401 }), true)
+  for (const status of [0, 400, 403, 404, 408, 409, 429, 500]) {
+    assert.equal(cardTimelineShouldInvalidateSession({ status }), false)
+  }
+  assert.equal(cardTimelineShouldInvalidateSession(new Error('401')), false)
 })
 
 test('non-wire, oversized and deeply nested values fail closed', () => {

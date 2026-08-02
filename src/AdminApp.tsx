@@ -98,6 +98,7 @@ import {
   cardTimelineRequestScope,
   cardTimelineSessionReadAllowed,
   cardTimelineShouldClearSnapshot,
+  cardTimelineShouldInvalidateSession,
   createAdminCardTimelineFeed,
   parseAdminCardTimelinePage,
 } from './cardTimelineContract'
@@ -442,8 +443,8 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
           {unavailable[active] ? <Unavailable {...unavailable[active]!} /> : null}
           {active === 'subsystems' && <DataCard section={{ title: 'FastLink 子系统能力地图', description: '状态依据当前 Railway Backend 正式 Controller 合同，不依据演示数据。', value: capabilityRows }} query={query} />}
           {active === 'permissions' && <Permissions session={session} />}
-          {active === 'cardcenter' && <CardWorkspace session={session} tenantId={tenantId} mode="card" />}
-          {active === 'cardhistory' && <CardWorkspace session={session} tenantId={tenantId} mode="history" />}
+          {active === 'cardcenter' && <CardWorkspace session={session} tenantId={tenantId} mode="card" invalidateSession={invalidateSession} />}
+          {active === 'cardhistory' && <CardWorkspace session={session} tenantId={tenantId} mode="history" invalidateSession={invalidateSession} />}
           {active === 'operations' && <OperationsWorkspace session={session} tenantId={tenantId} onUnauthorized={onLogout} invalidateSession={invalidateSession} />}
           {active === 'funds' && <TreasuryReconciliationWorkspace session={session} tenantId={tenantId} />}
           {!unavailable[active] && !['subsystems', 'permissions', 'cardcenter', 'cardhistory', 'operations', 'funds'].includes(active) && (
@@ -548,7 +549,7 @@ function Permissions({ session }: { session: AdminSession }) {
   return <><PageHeading title="Role Management" tenant={session.user.tenantId} source={session.user.environment} busy={false} refresh={() => undefined} /><section className="unavailable partial"><ShieldCheck /><div><h3>当前 Session 权限已真实接通</h3><p>Railway Backend 暂无角色目录、成员列表和权限矩阵的管理接口，因此只展示当前服务端 Session 返回的真实角色与权限。</p></div></section><DataCard section={{ title: 'Authenticated RBAC', description: 'No local role seed or fake permission matrix', value: rows }} query="" /></>
 }
 
-function CardWorkspace({ session, tenantId, mode }: { session: AdminSession; tenantId: string; mode: 'card' | 'history' }) {
+function CardWorkspace({ session, tenantId, mode, invalidateSession }: { session: AdminSession; tenantId: string; mode: 'card' | 'history'; invalidateSession: (expectedAccessToken: string) => void }) {
   const [cardId, setCardId] = useState('')
   const [view, setView] = useState<CardWorkspaceView | null>(null)
   const [busy, setBusy] = useState('')
@@ -558,9 +559,18 @@ function CardWorkspace({ session, tenantId, mode }: { session: AdminSession; ten
   const [selectedTransaction, setSelectedTransaction] = useState<AdminCardTransaction | null>(null)
   const [transactionsLoaded, setTransactionsLoaded] = useState(false)
   const source = session.user.environment as DataSource
-  const baseScope = cardWorkspaceBaseScope(session.user.id, session.expiresAt, tenantId, source, mode)
+  const tokenIdentity = useRef<{ token: string; marker: string } | null>(null)
+  if (!tokenIdentity.current || tokenIdentity.current.token !== session.accessToken) {
+    tokenIdentity.current = { token: session.accessToken, marker: crypto.randomUUID() }
+  }
+  const tokenMarker = tokenIdentity.current.marker
+  const baseScope = `${cardWorkspaceBaseScope(session.user.id, session.expiresAt, tenantId, source, mode)}\u0000${tokenMarker}`
   const { mounted, requestAbort: transactionAbort, requestGate } = useScopedRequestLifecycle(baseScope)
   const stateScope = useRef(baseScope)
+  const currentToken = useRef(session.accessToken)
+  const invalidateSessionRef = useRef(invalidateSession)
+  currentToken.current = session.accessToken
+  invalidateSessionRef.current = invalidateSession
   const display = visibleCardWorkspaceState(stateScope.current, baseScope, { cardId, view, busy, error })
   const scopeIsCurrent = stateScope.current === baseScope
   const collectionScope = cardTransactionCollectionScope(session.user.id, session.expiresAt, tenantId, source, display.cardId.trim(), transactionQuery)
@@ -592,16 +602,20 @@ function CardWorkspace({ session, tenantId, mode }: { session: AdminSession; ten
       return
     }
     const transactionScope = cardTransactionCollectionScope(session.user.id, session.expiresAt, tenantId, source, id, transactionQuery)
-    const timelineScope = cardTimelineCollectionScope(session.user.id, session.expiresAt, tenantId, source, id)
+    const timelineScope = cardTimelineCollectionScope(session.user.id, session.expiresAt, tenantId, source, id, tokenMarker)
     const requestScope = action === 'transactions'
       ? cardTransactionRequestScope(session.user.id, session.expiresAt, tenantId, source, id, transactionQuery, cursor)
       : action === 'history'
-        ? cardTimelineRequestScope(session.user.id, session.expiresAt, tenantId, source, id)
+        ? cardTimelineRequestScope(session.user.id, session.expiresAt, tenantId, source, id, tokenMarker)
         : cardWorkspaceRequestScope(session.user.id, session.expiresAt, tenantId, source, mode, id, action)
     const ticket = beginRequest(requestGate.current, requestScope)
     const controller = action === 'transactions' || action === 'history' ? replaceRequestAbort(transactionAbort) : null
+    const capturedToken = session.accessToken
+    const capturedTokenMarker = tokenMarker
     const previousFeed = cursor === null ? createCardTransactionFeed(transactionScope) : visibleTransactionFeed
     const acceptsCurrentCompletion = () => acceptsMountedResponse(mounted.current, requestGate.current, ticket, requestScope)
+      && currentToken.current === capturedToken
+      && tokenIdentity.current?.marker === capturedTokenMarker
       && (action !== 'history' || cardTimelineSessionReadAllowed(session.user.id, session.expiresAt, source))
     setBusy(action)
     setError('')
@@ -619,7 +633,7 @@ function CardWorkspace({ session, tenantId, mode }: { session: AdminSession; ten
         do {
           const wire = await productionApi.cardTimeline(
             DEFAULT_API,
-            session.accessToken,
+            capturedToken,
             tenantId,
             id,
             next ?? undefined,
@@ -659,6 +673,9 @@ function CardWorkspace({ session, tenantId, mode }: { session: AdminSession; ten
       if (acceptsCurrentCompletion()) {
         if (action === 'history' && cardTimelineShouldClearSnapshot(error)) setView(null)
         setError(cardWorkspaceErrorText(error))
+        if (action === 'history' && cardTimelineShouldInvalidateSession(error)) {
+          invalidateSessionRef.current(capturedToken)
+        }
       }
     } finally {
       if (acceptsCurrentCompletion()) setBusy('')

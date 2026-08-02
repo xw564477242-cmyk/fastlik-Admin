@@ -300,9 +300,11 @@ export const cardTimelineCollectionScope = (
   tenantId: string,
   environment: DataSource,
   cardId: string,
+  tokenIdentityMarker: string,
 ): string => JSON.stringify([
   actorId,
   sessionExpiresAt,
+  tokenIdentityMarker,
   tenantId,
   environment,
   cardId,
@@ -316,8 +318,9 @@ export const cardTimelineRequestScope = (
   tenantId: string,
   environment: DataSource,
   cardId: string,
+  tokenIdentityMarker: string,
 ): string => JSON.stringify([
-  cardTimelineCollectionScope(actorId, sessionExpiresAt, tenantId, environment, cardId),
+  cardTimelineCollectionScope(actorId, sessionExpiresAt, tenantId, environment, cardId, tokenIdentityMarker),
   'atomic-refresh',
 ])
 
@@ -334,19 +337,23 @@ export const cardTimelineSessionReadAllowed = (
     && expiry > now
 }
 
-export const cardTimelineShouldClearSnapshot = (error: unknown): boolean => {
-  if (!error || typeof error !== 'object') return false
+const cardTimelineFailureStatus = (error: unknown): number | null => {
+  if (!error || typeof error !== 'object') return null
   try {
     const status = Object.getOwnPropertyDescriptor(error, 'status')
-    return Boolean(
-      status
-      && 'value' in status
-      && (status.value === 401 || status.value === 403 || status.value === 404),
-    )
+    return status && 'value' in status && typeof status.value === 'number' ? status.value : null
   } catch {
-    return false
+    return null
   }
 }
+
+export const cardTimelineShouldClearSnapshot = (error: unknown): boolean => {
+  const status = cardTimelineFailureStatus(error)
+  return status === 401 || status === 403 || status === 404
+}
+
+export const cardTimelineShouldInvalidateSession = (error: unknown): boolean =>
+  cardTimelineFailureStatus(error) === 401
 
 export function adminCardTimelineContractEvidence(sourceCommit: string) {
   if (!/^[a-f0-9]{40}$/.test(sourceCommit)) throw new Error('SOURCE_SHA must be a lowercase 40-character commit SHA')
@@ -365,11 +372,12 @@ export function adminCardTimelineContractEvidence(sourceCommit: string) {
     maximumItems: MAX_ADMIN_CARD_TIMELINE_ITEMS,
     exactPageFields: Object.freeze([...ADMIN_CARD_TIMELINE_PAGE_FIELDS]),
     exactEventFields: Object.freeze([...ADMIN_CARD_TIMELINE_PUBLIC_FIELDS]),
-    collectionScopeBindings: Object.freeze(['actorId', 'sessionExpiresAt', 'tenantId', 'environment', 'cardId']),
+    collectionScopeBindings: Object.freeze(['actorId', 'sessionExpiresAt', 'tokenIdentityMarker', 'tenantId', 'environment', 'cardId']),
     requestGenerationBound: true,
     activeCancellationRequired: true,
     atomicRefresh: true,
     clearSnapshotOnCurrentStatus: Object.freeze([401, 403, 404]),
+    matchingSessionInvalidationOnCurrentStatus: Object.freeze([401]),
     staleCompletionWrites: 0,
     providerCalls: 0,
     businessWrites: 0,
