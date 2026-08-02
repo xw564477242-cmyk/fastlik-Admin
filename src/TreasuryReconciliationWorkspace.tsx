@@ -76,10 +76,6 @@ const safeError = (error: unknown): string => {
   return 'Treasury response could not be verified'
 }
 
-const resultState = <T,>(result: PromiseSettledResult<T>): EndpointState<T> => result.status === 'fulfilled'
-  ? Object.freeze({ status: 'READY', value: result.value })
-  : Object.freeze({ status: 'ERROR', message: safeError(result.reason) })
-
 const statusTone = (status: string): string => status === 'PASS' || status === 'MATCHED' ? 'pass' : status === 'NO_DATA' ? 'neutral' : 'blocked'
 
 function EndpointFailure({ title, message }: { title: string; message: string }) {
@@ -149,23 +145,29 @@ export function TreasuryReconciliationWorkspace({
       && acceptsMountedResponse(lifecycle.mounted.current, lifecycle.requestGate.current, ticket, baseScope)
     setState(emptyState(baseScope, true))
     try {
-      const results = await Promise.allSettled([
-        client.reconciliation(session.accessToken, tenantId, treasuryEnvironment, controller.signal)
-          .then((value) => parseTreasuryReconciliation(value, treasuryEnvironment)),
-        client.trialBalance(session.accessToken, tenantId, treasuryEnvironment, controller.signal)
-          .then(parseTreasuryTrialBalance),
-        client.dailyClosing(session.accessToken, tenantId, treasuryEnvironment, controller.signal)
-          .then((value) => parseTreasuryDailyClosing(value, treasuryEnvironment)),
-      ] as const)
-      if (isCurrent()) {
-        setState(Object.freeze({
-          scope: baseScope,
-          busy: true,
-          reconciliation: resultState(results[0]),
-          trialBalance: resultState(results[1]),
-          dailyClosing: resultState(results[2]),
-        }))
+      const publishEndpoint = (patch: Partial<Pick<TreasuryDashboardState, 'reconciliation' | 'trialBalance' | 'dailyClosing'>>) => {
+        if (!isCurrent()) return
+        setState((current) => current.scope === baseScope ? Object.freeze({ ...current, ...patch }) : current)
       }
+      const reconciliation = client.reconciliation(session.accessToken, tenantId, treasuryEnvironment, controller.signal)
+        .then((value) => parseTreasuryReconciliation(value, treasuryEnvironment))
+        .then(
+          (value) => publishEndpoint({ reconciliation: Object.freeze({ status: 'READY', value }) }),
+          (error) => publishEndpoint({ reconciliation: Object.freeze({ status: 'ERROR', message: safeError(error) }) }),
+        )
+      const trialBalance = client.trialBalance(session.accessToken, tenantId, treasuryEnvironment, controller.signal)
+        .then(parseTreasuryTrialBalance)
+        .then(
+          (value) => publishEndpoint({ trialBalance: Object.freeze({ status: 'READY', value }) }),
+          (error) => publishEndpoint({ trialBalance: Object.freeze({ status: 'ERROR', message: safeError(error) }) }),
+        )
+      const dailyClosing = client.dailyClosing(session.accessToken, tenantId, treasuryEnvironment, controller.signal)
+        .then((value) => parseTreasuryDailyClosing(value, treasuryEnvironment))
+        .then(
+          (value) => publishEndpoint({ dailyClosing: Object.freeze({ status: 'READY', value }) }),
+          (error) => publishEndpoint({ dailyClosing: Object.freeze({ status: 'ERROR', message: safeError(error) }) }),
+        )
+      await Promise.allSettled([reconciliation, trialBalance, dailyClosing])
     } finally {
       if (isCurrent()) setState((current) => current.scope === baseScope ? Object.freeze({ ...current, busy: false }) : current)
     }
