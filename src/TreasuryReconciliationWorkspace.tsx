@@ -26,6 +26,7 @@ import {
   type TreasuryReconciliationSummary,
 } from './treasuryReconciliationContract'
 import { useScopedRequestLifecycle } from './useScopedRequestLifecycle'
+import { TreasuryJournalReceiptPanel } from './TreasuryJournalReceiptPanel'
 
 type TreasuryEnvironment = Extract<DataSource, 'SANDBOX' | 'TEST'>
 
@@ -119,11 +120,15 @@ export function TreasuryReconciliationWorkspace({
   tenantId,
   client = defaultClient,
   now = Date.now,
+  runtimeEnvironment,
+  invalidateSession,
 }: {
   session: AdminSession
   tenantId: string
   client?: TreasuryReconciliationClient
   now?: () => number
+  runtimeEnvironment: string | undefined
+  invalidateSession: (expectedAccessToken: string) => void
 }) {
   const environment = session.user.environment as DataSource
   const supportedEnvironment = environment === 'SANDBOX' || environment === 'TEST'
@@ -139,10 +144,10 @@ export function TreasuryReconciliationWorkspace({
   const lifecycle = useScopedRequestLifecycle(baseScope)
   const [state, setState] = useState<TreasuryDashboardState>(() => emptyState(baseScope))
   const visible = state.scope === baseScope ? state : emptyState(baseScope)
-  const sessionAllowed = treasurySessionReadAllowed(session, environment, now())
+  const sessionAllowed = treasurySessionReadAllowed(session, tenantId, environment, now())
 
   const load = useCallback(async () => {
-    if (!supportedEnvironment || !treasurySessionReadAllowed(session, environment, now())) {
+    if (!supportedEnvironment || !treasurySessionReadAllowed(session, tenantId, environment, now())) {
       setState(emptyState(baseScope))
       return
     }
@@ -152,7 +157,7 @@ export function TreasuryReconciliationWorkspace({
     const isCurrent = () => lifecycle.requestAbort.current === controller
       && currentBaseScope.current === baseScope
       && currentAccessToken.current === session.accessToken
-      && treasurySessionReadAllowed(session, environment, now())
+      && treasurySessionReadAllowed(session, tenantId, environment, now())
       && acceptsMountedResponse(lifecycle.mounted.current, lifecycle.requestGate.current, ticket, baseScope)
     setState(emptyState(baseScope, true))
     try {
@@ -192,11 +197,11 @@ export function TreasuryReconciliationWorkspace({
 
   useEffect(() => {
     setState(emptyState(baseScope))
-    if (supportedEnvironment && treasurySessionReadAllowed(session, environment, now())) void load()
+    if (supportedEnvironment && treasurySessionReadAllowed(session, tenantId, environment, now())) void load()
   }, [baseScope, environment, load, now, session, supportedEnvironment])
 
   return <>
-    <div className="page-head"><div><span>READ ONLY · {environment}</span><h2>资金池与清算</h2><p>{tenantId} · 三个端点独立校验；切换页面、会话、租户或环境会中止旧请求并隐藏旧快照。</p></div><button className="primary-btn" data-treasury-action="refresh" disabled={visible.busy || !sessionAllowed || !supportedEnvironment} onClick={() => void load()}><RefreshCw className={visible.busy ? 'spin' : ''} />刷新只读对账</button></div>
+    <div className="page-head"><div><span>READ ONLY · {environment}</span><h2>资金池与清算</h2><p>{tenantId} · 四个汇总端点独立校验，并提供一条 operation 精确回执查询；作用域变化会中止旧请求并隐藏旧快照。</p></div><button className="primary-btn" data-treasury-action="refresh" disabled={visible.busy || !sessionAllowed || !supportedEnvironment} onClick={() => void load()}><RefreshCw className={visible.busy ? 'spin' : ''} />刷新只读对账</button></div>
     {!supportedEnvironment && <section className="unavailable" data-treasury-blocked="environment"><AlertTriangle /><div><h3>Environment Gate Closed</h3><p>本工作区只允许 SANDBOX 与 TEST；不会向 UAT 或 PRODUCTION 发出请求。</p></div></section>}
     {supportedEnvironment && !sessionAllowed && <section className="unavailable" data-treasury-blocked="session"><AlertTriangle /><div><h3>Admin Session Expired</h3><p>当前会话不可继续读取；旧请求完成不会写入页面。</p></div></section>}
     {supportedEnvironment && sessionAllowed && visible.busy && visible.reconciliation.status === 'LOADING' && <section className="empty-state treasury-loading"><LoaderCircle className="spin" /><h3>正在核验只读 Treasury 合同</h3><p>不会读取缓存、原始 Provider 数据或任何生产环境。</p></section>}
@@ -208,5 +213,6 @@ export function TreasuryReconciliationWorkspace({
     {visible.trialBalance.status === 'ERROR' && <EndpointFailure title="Trial balance unavailable" message={visible.trialBalance.message} />}
     {visible.dailyClosing.status === 'READY' && <DailyClosingPanel value={visible.dailyClosing.value} />}
     {visible.dailyClosing.status === 'ERROR' && <EndpointFailure title="Daily closing unavailable" message={visible.dailyClosing.message} />}
+    <TreasuryJournalReceiptPanel session={session} tenantId={tenantId} runtimeEnvironment={runtimeEnvironment} invalidateSession={invalidateSession} now={now} />
   </>
 }

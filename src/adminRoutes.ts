@@ -222,6 +222,11 @@ export const adminRoutes = {
     `${adminRoutes.tenant(tenantId)}/settlement/trial-balance?${environmentQuery(environment)}`,
   treasuryDailyClosing: (tenantId: string, environment: Extract<DataSource, 'SANDBOX' | 'TEST'>) =>
     `${adminRoutes.tenant(tenantId)}/settlement/daily-closing?${environmentQuery(environment)}`,
+  treasuryFundsInstruction: (
+    tenantId: string,
+    operationId: string,
+    environment: Extract<DataSource, 'SANDBOX' | 'TEST'>,
+  ) => `${adminRoutes.tenant(tenantId)}/treasury/funds-instructions/${segment(operationId)}?${environmentQuery(environment)}`,
   walletOperations: (
     tenantId: string,
     environment: Extract<DataSource, 'SANDBOX' | 'TEST'>,

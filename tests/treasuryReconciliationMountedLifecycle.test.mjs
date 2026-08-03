@@ -20,7 +20,7 @@ const session = (patch = {}) => ({
   accessToken: 'token',
   expiresAt: '2026-08-01T01:00:00.000Z',
   user: {
-    id: 'admin-1', tenantId: 'home-tenant', environment: 'TEST', roles: ['ADMIN'], permissions: ['treasury:read'],
+    id: 'admin-1', tenantId: 'home-tenant', environment: 'TEST', roles: ['ADMIN'], permissions: ['admin:read', 'platform:tenants:write'],
     ...patch,
   },
 })
@@ -54,7 +54,7 @@ function MountedTreasuryProbe({ identity, tenantId, pending, clock, writes }) {
     const isCurrent = () => lifecycle.requestAbort.current === controller
       && currentBaseScope.current === baseScope
       && currentAccessToken.current === identity.accessToken
-      && treasurySessionReadAllowed(identity, environment, clock.now)
+      && treasurySessionReadAllowed(identity, tenantId, environment, clock.now)
       && acceptsMountedResponse(lifecycle.mounted.current, lifecycle.requestGate.current, ticket, baseScope)
     setBusy(true)
     setResult('idle')
@@ -140,7 +140,7 @@ test('production component uses the tested mounted, scope and live-expiry predic
   assert.match(source, /useScopedRequestLifecycle\(baseScope\)/)
   assert.match(source, /currentBaseScope\.current === baseScope/)
   assert.match(source, /currentAccessToken\.current === session\.accessToken/)
-  assert.match(source, /treasurySessionReadAllowed\(session, environment, now\(\)\)/)
+  assert.match(source, /treasurySessionReadAllowed\(session, tenantId, environment, now\(\)\)/)
   assert.match(source, /acceptsMountedResponse\(lifecycle\.mounted\.current/)
   assert.match(source, /Promise\.allSettled/)
   assert.match(source, /publishEndpoint\(\{ liquidity:/)
