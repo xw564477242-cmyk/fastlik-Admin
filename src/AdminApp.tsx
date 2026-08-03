@@ -449,7 +449,7 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
           {active === 'cardcenter' && <CardWorkspace session={session} tenantId={tenantId} mode="card" invalidateSession={invalidateSession} />}
           {active === 'cardhistory' && <CardWorkspace session={session} tenantId={tenantId} mode="history" invalidateSession={invalidateSession} />}
           {active === 'operations' && <OperationsWorkspace session={session} tenantId={tenantId} onUnauthorized={onLogout} invalidateSession={invalidateSession} />}
-          {active === 'funds' && <TreasuryReconciliationWorkspace session={session} tenantId={tenantId} />}
+          {active === 'funds' && <TreasuryReconciliationWorkspace session={session} tenantId={tenantId} runtimeEnvironment={runtimeConfig.environment} invalidateSession={invalidateSession} />}
           {!unavailable[active] && !['subsystems', 'permissions', 'cardcenter', 'cardhistory', 'operations', 'funds'].includes(active) && (
             <>
               <PageHeading title={current.label} tenant={selectedTenant?.brandName || tenantId} source={source} busy={busy} refresh={() => void load()} />

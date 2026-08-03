@@ -4,6 +4,7 @@ import { MAX_CARD_WORKSPACE_JSON_BYTES } from './cardWorkspaceContract'
 import { MAX_CARD_TRANSACTION_JSON_BYTES } from './cardTransactionContract'
 import { MAX_ADMIN_CARD_TIMELINE_JSON_BYTES } from './cardTimelineContract'
 import { MAX_TREASURY_RECONCILIATION_JSON_BYTES } from './treasuryReconciliationContract'
+import { MAX_TREASURY_FUNDS_INSTRUCTION_JSON_BYTES } from './treasuryFundsInstructionContract'
 import { MAX_WALLET_OPERATION_LIST_JSON_BYTES } from './walletOperationListContract'
 import { adminKycPath, MAX_ADMIN_KYC_JSON_BYTES, parseAdminKycResponse, type AdminKycEnvironment, type AdminKycRecord } from './adminKycContract'
 
@@ -151,6 +152,7 @@ export const productionApi={
  treasuryReconciliation:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryReconciliation(tenantId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_RECONCILIATION_JSON_BYTES},signal),
  treasuryTrialBalance:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryTrialBalance(tenantId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_RECONCILIATION_JSON_BYTES},signal),
  treasuryDailyClosing:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryDailyClosing(tenantId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_RECONCILIATION_JSON_BYTES},signal),
+ treasuryFundsInstruction:(_base:string,key:string,tenantId:string,operationId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryFundsInstruction(tenantId,operationId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_FUNDS_INSTRUCTION_JSON_BYTES},signal),
  accounts:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<WalletAccount[]>(`/admin/tenants/${tenantId}/ledger/accounts?${query(environment)}`,key),
  journals:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Journal[]>(`/admin/tenants/${tenantId}/ledger/journals?${query(environment)}`,key),
  walletOperations:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,query:AdminWalletOperationQuery,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.walletOperations(tenantId,environment,query),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_WALLET_OPERATION_LIST_JSON_BYTES},signal),

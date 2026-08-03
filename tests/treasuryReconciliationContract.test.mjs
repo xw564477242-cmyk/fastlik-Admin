@@ -161,15 +161,17 @@ test('Treasury scope binds actor, session expiry, home tenant, selected tenant, 
   const session = {
     accessToken: 'token',
     expiresAt: '2026-08-01T01:00:00.000Z',
-    user: { id: 'admin-1', tenantId: 'home-tenant', environment: 'TEST', roles: ['OPS', 'ADMIN'], permissions: ['treasury:read'] },
+    user: { id: 'admin-1', tenantId: 'home-tenant', environment: 'TEST', roles: ['OPS', 'ADMIN'], permissions: ['admin:read', 'platform:tenants:write'] },
   }
   const scope = treasuryDashboardScope(session, 'selected-tenant', 'TEST')
   assert.match(scope, /admin-1/)
   assert.match(scope, /home-tenant/)
   assert.match(scope, /selected-tenant/)
-  assert.match(scope, /treasury:read/)
-  assert.equal(treasurySessionReadAllowed(session, 'TEST', Date.parse('2026-08-01T00:59:59.999Z')), true)
-  assert.equal(treasurySessionReadAllowed(session, 'TEST', Date.parse(session.expiresAt)), false)
-  assert.equal(treasurySessionReadAllowed(session, 'SANDBOX', Date.parse('2026-08-01T00:00:00.000Z')), false)
-  assert.equal(treasurySessionReadAllowed({ ...session, user: { ...session.user, environment: 'PRODUCTION' } }, 'PRODUCTION', 0), false)
+  assert.match(scope, /admin:read/)
+  assert.equal(treasurySessionReadAllowed(session, 'selected-tenant', 'TEST', Date.parse('2026-08-01T00:59:59.999Z')), true)
+  assert.equal(treasurySessionReadAllowed(session, 'selected-tenant', 'TEST', Date.parse(session.expiresAt)), false)
+  assert.equal(treasurySessionReadAllowed(session, 'selected-tenant', 'SANDBOX', Date.parse('2026-08-01T00:00:00.000Z')), false)
+  assert.equal(treasurySessionReadAllowed({ ...session, user: { ...session.user, environment: 'PRODUCTION' } }, 'selected-tenant', 'PRODUCTION', 0), false)
+  assert.equal(treasurySessionReadAllowed({ ...session, user: { ...session.user, permissions: ['admin:read'] } }, 'selected-tenant', 'TEST', Date.parse('2026-08-01T00:00:00.000Z')), false)
+  assert.equal(treasurySessionReadAllowed({ ...session, user: { ...session.user, permissions: ['platform:tenants:write'] } }, 'selected-tenant', 'TEST', Date.parse('2026-08-01T00:00:00.000Z')), false)
 })

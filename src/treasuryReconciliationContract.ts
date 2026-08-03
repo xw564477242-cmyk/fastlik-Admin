@@ -519,17 +519,24 @@ export const treasuryDashboardScope = (
 
 export const treasurySessionReadAllowed = (
   session: TreasurySession,
+  tenantId: string,
   environment: DataSource,
   now: number,
 ): boolean => {
   const expiresAt = Date.parse(session.expiresAt)
+  const permissions = Array.isArray(session.user.permissions) ? session.user.permissions : []
+  const adminRead = permissions.includes('*') || permissions.includes('admin:*') || permissions.includes('admin:read')
+  const crossTenant = permissions.includes('*') || permissions.includes('platform:*') || permissions.includes('platform:tenants:write')
   return (environment === 'SANDBOX' || environment === 'TEST')
     && session.user.environment === environment
     && session.accessToken.length > 0
     && session.user.id.length > 0
     && session.user.tenantId.length > 0
+    && tenantId.length > 0
     && Array.isArray(session.user.roles)
-    && Array.isArray(session.user.permissions)
+    && Array.isArray(permissions)
+    && adminRead
+    && (tenantId === session.user.tenantId || crossTenant)
     && Number.isFinite(expiresAt)
     && now < expiresAt
 }
