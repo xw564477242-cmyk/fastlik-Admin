@@ -7,6 +7,7 @@ import { MAX_TREASURY_RECONCILIATION_JSON_BYTES } from './treasuryReconciliation
 import { MAX_TREASURY_FUNDS_INSTRUCTION_JSON_BYTES } from './treasuryFundsInstructionContract'
 import { MAX_WALLET_OPERATION_LIST_JSON_BYTES } from './walletOperationListContract'
 import { adminKycPath, MAX_ADMIN_KYC_JSON_BYTES, parseAdminKycResponse, type AdminKycEnvironment, type AdminKycRecord } from './adminKycContract'
+import { MAX_TENANT_DETAIL_JSON_BYTES, parseTenantDetailResponse, type TenantDetail } from './tenantDetailContract'
 
 export const DEFAULT_API = runtimeConfig.apiUrl
 export type { DataSource } from './adminRoutes'
@@ -17,7 +18,7 @@ export type Health = {
  responseTimeMs?:number;timestamp:string;threddConfigurationStatus?:ThreddConfiguration
 }
 export type AdminSession = {accessToken:string;tokenType:'Bearer';expiresInSeconds:number;expiresAt:string;user:{id:string;email:string;tenantId:string;environment:'SANDBOX'|'TEST'|'UAT'|'PRODUCTION';roles:string[];permissions:string[]}}
-export type Tenant = {id:string;legalName:string;brandName:string;slug:string;status:string;environment:'SANDBOX'|'TEST'|'UAT'|'PRODUCTION'}
+export type Tenant = TenantDetail
 export type TrialBalance = {assetCode:string;debit:string;credit:string;balanced:boolean}
 export type TreasuryPosition = {assetCode:string;sponsorReserve:string;requiredReserve:string;availableBalance:string;authorizationHold:string;pendingSettlement:string;totalControlled?:string;liquidityRatio:string|null;updatedAt?:string}
 export type Reconciliation = {generatedAt:string;dataSource:string;evidencePresent:boolean;status:'MATCHED'|'DISCREPANCY'|'NO_DATA';pendingChecks:Array<{assetCode:string;expectedPendingSettlement:string;treasuryPendingSettlement:string;difference:string;matched:boolean}>;authorizationHoldChecks:Array<{assetCode:string;expectedAuthorizationHold:string;treasuryAuthorizationHold:string;difference:string;matched:boolean}>;clearingDifferenceChecks:Array<{assetCode:string;clearingDifference:string;expectedAuthorizationHold:string;matched:boolean}>;journalChecks:Array<{assetCode:string;debit:string;credit:string;matched:boolean}>;trialBalance:TrialBalance[];externalReconciliation:{bank:{status:'BLOCKED';blocker:string};processor:{status:'BLOCKED';blocker:string}}}
@@ -141,7 +142,7 @@ export const productionApi={
  logout:(_base:string,token:string)=>apiRequest<{revoked:true}>('/admin/auth/logout',token,'POST'),
  me:(_base:string,token:string)=>apiRequest<Record<string,unknown>>('/admin/auth/me',token),
  tenants:(_base:string,token:string)=>apiRequest<Tenant[]>('/admin/tenants',token),
- tenant:(_base:string,token:string,tenantId:string)=>apiRequest<Tenant>(adminRoutes.tenant(tenantId),token),
+ tenant:async(_base:string,token:string,tenantId:string,environment:Tenant['environment'],signal?:AbortSignal):Promise<Tenant>=>parseTenantDetailResponse(await apiRequest<string>(adminRoutes.tenant(tenantId),token,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TENANT_DETAIL_JSON_BYTES},signal),tenantId,environment),
  readiness:(_base:string,token:string,tenantId:string)=>apiRequest<IntegrationReadiness>(adminRoutes.readiness(tenantId),token),
  treasury:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<{generatedAt:string;positions:TreasuryPosition[]}>(`/admin/tenants/${tenantId}/dashboards/treasury?${query(environment)}`,key),
  settlementDashboard:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Record<string,unknown>>(`/admin/tenants/${tenantId}/dashboards/settlement?${query(environment)}`,key),

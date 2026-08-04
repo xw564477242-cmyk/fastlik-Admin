@@ -152,6 +152,7 @@ jobs:
             src/cardTimelineContract.ts \
             src/cardWorkspaceContract.ts \
             src/productionApi.ts \
+            src/tenantDetailContract.ts \
             src/requestGeneration.ts \
             src/runtimeConfig.ts \
             src/useScopedRequestLifecycle.ts \
@@ -163,6 +164,7 @@ jobs:
             tests/cardWorkspaceContract.test.mjs \
             tests/cardTransactionMountedLifecycle.test.mjs \
             tests/scopedRequestLifecycleMounted.test.mjs \
+            tests/tenantDetailContract.test.mjs \
             tests/adminKycContract.test.mjs \
             tests/adminKycMountedLifecycle.test.mjs \
             scripts/write-card-timeline-evidence.mjs \
@@ -199,6 +201,7 @@ jobs:
             src/cardTimelineContract.ts
             src/cardWorkspaceContract.ts
             src/productionApi.ts
+            src/tenantDetailContract.ts
             src/requestGeneration.ts
             src/runtimeConfig.ts
             src/useScopedRequestLifecycle.ts
@@ -210,6 +213,7 @@ jobs:
             tests/cardWorkspaceContract.test.mjs
             tests/cardTransactionMountedLifecycle.test.mjs
             tests/scopedRequestLifecycleMounted.test.mjs
+            tests/tenantDetailContract.test.mjs
             tests/adminKycContract.test.mjs
             tests/adminKycMountedLifecycle.test.mjs
             scripts/write-card-timeline-evidence.mjs
