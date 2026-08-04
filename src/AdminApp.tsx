@@ -330,7 +330,8 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
         if (!cancelled) setTenants(result)
       } catch {
         try {
-          const currentTenant = await productionApi.tenant(DEFAULT_API, token, session.user.tenantId)
+          if (session.user.environment === 'UAT') throw new Error('Tenant detail is unavailable outside the Backend environment contract')
+          const currentTenant = await productionApi.tenant(DEFAULT_API, token, session.user.tenantId, session.user.environment)
           if (!cancelled) setTenants([currentTenant])
         } catch (error) {
           if (!cancelled) setError(errorText(error))
@@ -360,7 +361,7 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
           settledSection('Data Contamination', 'Legacy Demo / Mock contamination audit', productionApi.contamination(DEFAULT_API, token, tenantId, source)),
         ])
       } else if (active === 'tenants') {
-        next = [{ title: '租户与合作方', description: '来自 GET /admin/tenants', value: tenants }]
+        next = []
       } else if (active === 'dashboards') {
         next = await Promise.all([
           settledSection('Treasury Dashboard', 'Railway live business table', productionApi.treasury(DEFAULT_API, token, tenantId, source)),
@@ -445,12 +446,13 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
           {error && <div className="inline-error page-error"><Unplug />{error}</div>}
           {unavailable[active] ? <Unavailable {...unavailable[active]!} /> : null}
           {active === 'subsystems' && <DataCard section={{ title: 'FastLink 子系统能力地图', description: '状态依据当前 Railway Backend 正式 Controller 合同，不依据演示数据。', value: capabilityRows }} query={query} />}
+          {active === 'tenants' && <TenantWorkspace session={session} tenants={tenants} selectedTenantId={tenantId} invalidateSession={invalidateSession} />}
           {active === 'permissions' && <Permissions session={session} />}
           {active === 'cardcenter' && <CardWorkspace session={session} tenantId={tenantId} mode="card" invalidateSession={invalidateSession} />}
           {active === 'cardhistory' && <CardWorkspace session={session} tenantId={tenantId} mode="history" invalidateSession={invalidateSession} />}
           {active === 'operations' && <OperationsWorkspace session={session} tenantId={tenantId} onUnauthorized={onLogout} invalidateSession={invalidateSession} />}
           {active === 'funds' && <TreasuryReconciliationWorkspace session={session} tenantId={tenantId} runtimeEnvironment={runtimeConfig.environment} invalidateSession={invalidateSession} />}
-          {!unavailable[active] && !['subsystems', 'permissions', 'cardcenter', 'cardhistory', 'operations', 'funds'].includes(active) && (
+          {!unavailable[active] && !['tenants', 'subsystems', 'permissions', 'cardcenter', 'cardhistory', 'operations', 'funds'].includes(active) && (
             <>
               <PageHeading title={current.label} tenant={selectedTenant?.brandName || tenantId} source={source} busy={busy} refresh={() => void load()} />
               {busy && !sections.length ? <Loading /> : sections.map((section) => <DataCard key={section.title} section={section} query={query} />)}
@@ -461,6 +463,68 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
       </main>
     </div>
   )
+}
+
+function TenantWorkspace({ session, tenants, selectedTenantId, invalidateSession }: {
+  session: AdminSession
+  tenants: Tenant[]
+  selectedTenantId: string
+  invalidateSession: (expectedAccessToken: string) => void
+}) {
+  const [detail, setDetail] = useState<Tenant | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const controller = useRef<AbortController | null>(null)
+  const environment = session.user.environment === 'UAT' ? null : session.user.environment
+  const mountedScope = `${session.accessToken}\0${environment ?? 'UNSUPPORTED'}\0${selectedTenantId}`
+  const mountedScopeRef = useRef(mountedScope)
+  mountedScopeRef.current = mountedScope
+  const open = async (tenantId: string) => {
+    if (!environment) {
+      setError('Tenant detail is unavailable outside SANDBOX, TEST or PRODUCTION')
+      return
+    }
+    controller.current?.abort()
+    const request = new AbortController()
+    controller.current = request
+    const requestScope = mountedScopeRef.current
+    const requestToken = session.accessToken
+    setBusy(true)
+    setError('')
+    setDetail(null)
+    try {
+      const value = await productionApi.tenant(DEFAULT_API, session.accessToken, tenantId, environment, request.signal)
+      if (!request.signal.aborted && mountedScopeRef.current === requestScope) {
+        setDetail(value)
+      }
+    } catch (error) {
+      if (!request.signal.aborted && mountedScopeRef.current === requestScope) {
+        if (error instanceof ApiError && error.status === 401) invalidateSession(requestToken)
+        setError(errorText(error))
+      }
+    } finally {
+      if (!request.signal.aborted && mountedScopeRef.current === requestScope) setBusy(false)
+    }
+  }
+  useEffect(() => () => controller.current?.abort(), [])
+  useEffect(() => {
+    controller.current?.abort()
+    setDetail(null)
+    setError('')
+    setBusy(false)
+  }, [mountedScope])
+  return <>
+    <PageHeading title="租户与合作方" tenant={selectedTenantId} source={environment ?? session.user.environment} busy={busy} refresh={() => void open(selectedTenantId)} disabled={!selectedTenantId || !environment} description="点击租户条目读取当前管理员环境中的精确详情合同；切换请求时不保留旧详情。" />
+    <article className="panel data-panel"><div className="panel-title"><div><h3>Tenant Directory</h3><p>GET /admin/tenants · 仅当前 Admin 环境</p></div><span className="record-count">{tenants.length} RECORDS</span></div>
+      <div className="table-wrap"><table><thead><tr><th>品牌</th><th>法定名称</th><th>Slug</th><th>状态</th><th>环境</th><th>操作</th></tr></thead><tbody>{tenants.map((tenant) => <tr key={tenant.id}><td>{tenant.brandName}</td><td>{tenant.legalName}</td><td>{tenant.slug}</td><td>{tenant.status}</td><td>{tenant.environment}</td><td><button className="primary-btn" disabled={busy} onClick={() => void open(tenant.id)}>查看详情</button></td></tr>)}</tbody></table></div>
+    </article>
+    {busy && <Loading />}
+    {error && <div className="inline-error page-error"><AlertTriangle />{error}</div>}
+    {detail && <article className="panel card-contract-panel"><div className="panel-title"><div><h3>Tenant Detail</h3><p>GET /admin/tenants/{detail.id} · VERIFIED PUBLIC CONTRACT</p></div><span className="record-count">READ ONLY</span></div><dl className="card-contract-grid">{[
+      ['Tenant ID', detail.id], ['Legal name', detail.legalName], ['Brand name', detail.brandName], ['Slug', detail.slug],
+      ['Status', detail.status], ['Environment', detail.environment], ['Created at', detail.createdAt], ['Updated at', detail.updatedAt],
+    ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></article>}
+  </>
 }
 
 function PageHeading({ title, tenant, source, busy, refresh, disabled = false, description }: { title: string; tenant: string; source: string; busy: boolean; refresh: () => void; disabled?: boolean; description?: string }) {
