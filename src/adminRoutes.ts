@@ -212,6 +212,10 @@ const cardTimelineQuery = (cursor?: string): string => {
 export const adminRoutes = {
   tenant: (tenantId: string) =>
     `/admin/tenants/${segment(tenantId)}`,
+  cardProducts: (tenantId: string) =>
+    `${adminRoutes.tenant(tenantId)}/card-products`,
+  cardApplications: (tenantId: string) =>
+    `${adminRoutes.tenant(tenantId)}/card-applications`,
   readiness: (tenantId: string) =>
     `${adminRoutes.tenant(tenantId)}/integrations/readiness`,
   treasuryLiquidity: (tenantId: string, environment: Extract<DataSource, 'SANDBOX' | 'TEST'>) =>
@@ -254,4 +258,6 @@ export const adminRoutes = {
     `${adminRoutes.card(tenantId, cardId)}/freeze`,
   unfreezeCard: (tenantId: string, cardId: string) =>
     `${adminRoutes.card(tenantId, cardId)}/unfreeze`,
+  cardFees: (tenantId: string, cardId: string) =>
+    `${adminRoutes.card(tenantId, cardId)}/fees`,
 }
