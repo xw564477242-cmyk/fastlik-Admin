@@ -3,7 +3,9 @@ import test from 'node:test'
 import {
   LOVABLE_ADMIN_CONTRACTS,
   requestLovableAdminReadEndpoint,
+  requestLovableAdminWriteEndpoint,
   resolveLovableAdminReadEndpoints,
+  resolveLovableAdminWriteEndpoint,
 } from '../src/lovableAdminContractMap.ts'
 
 const context = Object.freeze({
@@ -94,6 +96,32 @@ test('real Admin request fails closed for an invalid token or unmapped endpoint'
     }),
     /mapped read-only Admin endpoints/,
   )
+})
+
+test('four Phase 1 writes map only to relative SANDBOX Admin endpoints', () => {
+  assert.deepEqual(resolveLovableAdminWriteEndpoint('createTenant', context), { operationId: 'createTenant', method: 'POST', path: '/api/admin/tenants' })
+  assert.deepEqual(resolveLovableAdminWriteEndpoint('createCardProductTemplate', context), { operationId: 'createCardProductTemplate', method: 'POST', path: '/api/admin/tenants/tenant-a/card-products' })
+  assert.deepEqual(resolveLovableAdminWriteEndpoint('createCardApplication', context), { operationId: 'createCardApplication', method: 'POST', path: '/api/admin/tenants/tenant-a/card-applications' })
+  assert.deepEqual(resolveLovableAdminWriteEndpoint('setCardFeeMode', context), { operationId: 'setCardFeeMode', method: 'PUT', path: '/api/admin/tenants/tenant-a/cards/card-1/fees' })
+  assert.throws(() => resolveLovableAdminWriteEndpoint('createTenant', { ...context, environment: 'TEST' }), /restricted to SANDBOX/)
+  assert.throws(() => resolveLovableAdminWriteEndpoint('createTenant', { ...context, environment: 'PRODUCTION' }), /only in SANDBOX or TEST/)
+})
+
+test('mapped write sends JSON with memory-only bearer and rejects unapproved routes', async () => {
+  const endpoint = resolveLovableAdminWriteEndpoint('createCardApplication', context)
+  let observed
+  const requester = async (path, init) => {
+    observed = { path, init }
+    return new Response(JSON.stringify({ id: 'application-1' }), { status: 201, headers: { 'content-type': 'application/json' } })
+  }
+  const body = { customerId: 'customer-1', productTemplateId: 'template-1', idempotencyKey: 'application:key:1' }
+  assert.deepEqual(await requestLovableAdminWriteEndpoint({ endpoint, adminBearer: 'sandbox-admin-token', body }, requester), { id: 'application-1' })
+  assert.equal(observed.path, '/api/admin/tenants/tenant-a/card-applications')
+  assert.equal(observed.init.method, 'POST')
+  assert.equal(observed.init.credentials, 'omit')
+  assert.equal(observed.init.headers.Authorization, 'Bearer sandbox-admin-token')
+  assert.deepEqual(JSON.parse(observed.init.body), body)
+  await assert.rejects(requestLovableAdminWriteEndpoint({ endpoint: { operationId: 'unsafe', method: 'PUT', path: '/v1/cards' }, adminBearer: 'sandbox-admin-token', body: {} }), /not mapped/)
 })
 
 test('identifier-dependent surfaces fail closed when context is incomplete', () => {

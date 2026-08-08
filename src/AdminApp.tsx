@@ -33,6 +33,7 @@ import {
 import { runtimeConfig } from './runtimeConfig'
 import './card-workspace.css'
 import { AdminKycPanel } from './AdminKycPanel'
+import { CardConfigurationPanel, TenantCreatePanel } from './AdminWritePanels'
 import {
   ApiError,
   DEFAULT_API,
@@ -446,8 +447,9 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
           {error && <div className="inline-error page-error"><Unplug />{error}</div>}
           {unavailable[active] ? <Unavailable {...unavailable[active]!} /> : null}
           {active === 'subsystems' && <DataCard section={{ title: 'FastLink 子系统能力地图', description: '状态依据当前 Railway Backend 正式 Controller 合同，不依据演示数据。', value: capabilityRows }} query={query} />}
-          {active === 'tenants' && <TenantWorkspace session={session} tenants={tenants} selectedTenantId={tenantId} invalidateSession={invalidateSession} />}
+          {active === 'tenants' && <TenantWorkspace session={session} tenants={tenants} selectedTenantId={tenantId} invalidateSession={invalidateSession} onCreated={() => void load()} />}
           {active === 'permissions' && <Permissions session={session} />}
+          {active === 'cardcenter' && <CardConfigurationPanel session={session} tenantId={tenantId} onCardCreated={() => undefined} />}
           {active === 'cardcenter' && <CardWorkspace session={session} tenantId={tenantId} mode="card" invalidateSession={invalidateSession} />}
           {active === 'cardhistory' && <CardWorkspace session={session} tenantId={tenantId} mode="history" invalidateSession={invalidateSession} />}
           {active === 'operations' && <OperationsWorkspace session={session} tenantId={tenantId} onUnauthorized={onLogout} invalidateSession={invalidateSession} />}
@@ -465,11 +467,12 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
   )
 }
 
-function TenantWorkspace({ session, tenants, selectedTenantId, invalidateSession }: {
+function TenantWorkspace({ session, tenants, selectedTenantId, invalidateSession, onCreated }: {
   session: AdminSession
   tenants: Tenant[]
   selectedTenantId: string
   invalidateSession: (expectedAccessToken: string) => void
+  onCreated: () => void
 }) {
   const [detail, setDetail] = useState<Tenant | null>(null)
   const [busy, setBusy] = useState(false)
@@ -515,6 +518,7 @@ function TenantWorkspace({ session, tenants, selectedTenantId, invalidateSession
   }, [mountedScope])
   return <>
     <PageHeading title="租户与合作方" tenant={selectedTenantId} source={environment ?? session.user.environment} busy={busy} refresh={() => void open(selectedTenantId)} disabled={!selectedTenantId || !environment} description="点击租户条目读取当前管理员环境中的精确详情合同；切换请求时不保留旧详情。" />
+    <TenantCreatePanel session={session} onCreated={onCreated} />
     <article className="panel data-panel"><div className="panel-title"><div><h3>Tenant Directory</h3><p>GET /admin/tenants · 仅当前 Admin 环境</p></div><span className="record-count">{tenants.length} RECORDS</span></div>
       <div className="table-wrap"><table><thead><tr><th>品牌</th><th>法定名称</th><th>Slug</th><th>状态</th><th>环境</th><th>操作</th></tr></thead><tbody>{tenants.map((tenant) => <tr key={tenant.id}><td>{tenant.brandName}</td><td>{tenant.legalName}</td><td>{tenant.slug}</td><td>{tenant.status}</td><td>{tenant.environment}</td><td><button className="primary-btn" disabled={busy} onClick={() => void open(tenant.id)}>查看详情</button></td></tr>)}</tbody></table></div>
     </article>

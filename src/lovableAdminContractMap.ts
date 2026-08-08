@@ -2,6 +2,7 @@ export const LOVABLE_ADMIN_ALLOWED_ENVIRONMENTS = ['SANDBOX', 'TEST'] as const
 
 export type LovableAdminEnvironment = (typeof LOVABLE_ADMIN_ALLOWED_ENVIRONMENTS)[number]
 export type LovableAdminContractStatus =
+  | 'CONNECTED_READ_WRITE'
   | 'CONNECTED_READ_ONLY'
   | 'PARTIAL_READ_ONLY'
   | 'BLOCKED_MISSING_CONTRACT'
@@ -20,13 +21,20 @@ export type LovableAdminSurface =
 
 export type LovableAdminEndpoint = Readonly<{
   operationId: string
-  method: 'GET'
+  method: 'GET' | 'POST' | 'PUT'
   path: string
 }>
 
 export type LovableAdminReadRequest = Readonly<{
   endpoint: LovableAdminEndpoint
   adminBearer: string
+  signal?: AbortSignal
+}>
+
+export type LovableAdminWriteRequest = Readonly<{
+  endpoint: LovableAdminEndpoint
+  adminBearer: string
+  body: Readonly<Record<string, unknown>>
   signal?: AbortSignal
 }>
 
@@ -76,24 +84,26 @@ const contract = (
 })
 
 export const LOVABLE_ADMIN_CONTRACTS: readonly LovableAdminContract[] = Object.freeze([
-  contract('/admin/tenants', 'CONNECTED_READ_ONLY', ['/api/admin/tenants']),
+  contract('/admin/tenants', 'CONNECTED_READ_WRITE', ['/api/admin/tenants']),
   contract(
     '/admin/tenants/$tenantId',
-    'PARTIAL_READ_ONLY',
-    ['/api/admin/tenants/:id', '/api/admin/tenants/:tenantId/integrations/readiness'],
+    'CONNECTED_READ_WRITE',
+    ['/api/admin/tenants/:id', '/api/admin/tenants/:tenantId/integrations/readiness', '/api/admin/tenants/:tenantId/card-products'],
     ['digital-asset capability writes', 'tenant fee-limit writes'],
   ),
   contract(
     '/admin/card-center',
-    'PARTIAL_READ_ONLY',
+    'CONNECTED_READ_WRITE',
     [
       '/api/admin/tenants/:tenantId/cards/:cardId/snapshot',
       '/api/admin/tenants/:tenantId/cards/:cardId/snapshot/balance',
       '/api/admin/tenants/:tenantId/cards/:cardId/snapshot/limits',
       '/api/admin/tenants/:tenantId/cards/:cardId/timeline?limit=25',
       '/api/admin/tenants/:tenantId/cards/:cardId/transactions?limit=25',
+      '/api/admin/tenants/:tenantId/card-products',
+      '/api/admin/tenants/:tenantId/card-applications',
+      '/api/admin/tenants/:tenantId/cards/:cardId/fees',
     ],
-    ['card creation', 'product-template assignment', 'card fee override writes'],
   ),
   contract(
     '/admin/funds',
@@ -147,9 +157,9 @@ export const assertLovableAdminEnvironment = (environment: string): LovableAdmin
   return environment as LovableAdminEnvironment
 }
 
-const endpoint = (operationId: string, path: string): LovableAdminEndpoint => Object.freeze({
+const endpoint = (operationId: string, path: string, method: LovableAdminEndpoint['method'] = 'GET'): LovableAdminEndpoint => Object.freeze({
   operationId,
-  method: 'GET',
+  method,
   path,
 })
 
@@ -209,6 +219,20 @@ export const resolveLovableAdminReadEndpoints = (
   }
 }
 
+export const resolveLovableAdminWriteEndpoint = (
+  operation: 'createTenant' | 'createCardProductTemplate' | 'createCardApplication' | 'setCardFeeMode',
+  context: LovableAdminContractContext,
+): LovableAdminEndpoint => {
+  assertLovableAdminEnvironment(context.environment)
+  if (context.environment !== 'SANDBOX') throw new Error('Phase 1 Admin writes are restricted to SANDBOX')
+  if (operation === 'createTenant') return endpoint(operation, '/api/admin/tenants', 'POST')
+  const tenantRoot = relativeTenantPath(requireTenantId(context.tenantId))
+  if (operation === 'createCardProductTemplate') return endpoint(operation, `${tenantRoot}/card-products`, 'POST')
+  if (operation === 'createCardApplication') return endpoint(operation, `${tenantRoot}/card-applications`, 'POST')
+  const cardId = requireLookupId('Card fee configuration', context.cardId)
+  return endpoint(operation, `${tenantRoot}/cards/${encodeURIComponent(cardId)}/fees`, 'PUT')
+}
+
 export const requestLovableAdminReadEndpoint = async (
   request: LovableAdminReadRequest,
   requester: typeof fetch = fetch,
@@ -237,5 +261,25 @@ export const requestLovableAdminReadEndpoint = async (
   if (!response.headers.get('content-type')?.toLowerCase().includes('application/json')) {
     throw new Error('FastLink Admin API returned a non-JSON response')
   }
+  return response.json()
+}
+
+export const requestLovableAdminWriteEndpoint = async (
+  request: LovableAdminWriteRequest,
+  requester: typeof fetch = fetch,
+): Promise<unknown> => {
+  const token = request.adminBearer.trim()
+  if (!token || token.length > 4096 || /[\r\n]/.test(token)) throw new Error('Lovable Admin real API requests require a valid administrator bearer')
+  if ((request.endpoint.method !== 'POST' && request.endpoint.method !== 'PUT') || !request.endpoint.path.startsWith('/api/admin/')) {
+    throw new Error('Lovable Admin write request is not mapped to an approved Admin endpoint')
+  }
+  const response = await requester(request.endpoint.path, {
+    method: request.endpoint.method,
+    headers: Object.freeze({ Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }),
+    credentials: 'omit', cache: 'no-store', redirect: 'error', signal: request.signal,
+    body: JSON.stringify(request.body),
+  })
+  if (!response.ok) throw new Error(`FastLink Admin API request failed with HTTP ${response.status}`)
+  if (!response.headers.get('content-type')?.toLowerCase().includes('application/json')) throw new Error('FastLink Admin API returned a non-JSON response')
   return response.json()
 }
