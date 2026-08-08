@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   LOVABLE_ADMIN_CONTRACTS,
+  requestLovableAdminReadEndpoint,
   resolveLovableAdminReadEndpoints,
 } from '../src/lovableAdminContractMap.ts'
 
@@ -24,7 +25,7 @@ test('mapping is read-only, relative, and restricted to SANDBOX and TEST', () =>
     assert.equal(contract.environments.includes('PRODUCTION'), false)
     for (const endpoint of resolveLovableAdminReadEndpoints(contract.surface, context)) {
       assert.equal(endpoint.method, 'GET')
-      assert.equal(endpoint.path.startsWith('/'), true)
+      assert.equal(endpoint.path.startsWith('/api/admin/'), true)
       assert.equal(/^https?:/i.test(endpoint.path), false)
     }
   }
@@ -49,12 +50,49 @@ test('tenant identifiers cannot escape encoded path boundaries and card IDs fail
   })
   assert.equal(endpoints.length, 5)
   for (const endpoint of endpoints) {
-    assert.match(endpoint.path, /^\/admin\/tenants\/tenant%2F\.\.%2F\.\.%2Fother%3Fenvironment%3DPRODUCTION\/cards\/card-1\//)
+    assert.match(endpoint.path, /^\/api\/admin\/tenants\/tenant%2F\.\.%2F\.\.%2Fother%3Fenvironment%3DPRODUCTION\/cards\/card-1\//)
     assert.equal(endpoint.path.includes('environment=PRODUCTION'), false)
   }
   assert.throws(
     () => resolveLovableAdminReadEndpoints('/admin/card-center', { ...context, cardId: 'card/1?operation=unfreeze' }),
     /requires a valid identifier/,
+  )
+})
+
+test('real Admin request uses the mapped GET endpoint without Mock fallback or credential persistence', async () => {
+  const [endpoint] = resolveLovableAdminReadEndpoints('/admin/tenants', context)
+  let observed
+  const requester = async (path, init) => {
+    observed = { path, init }
+    return new Response(JSON.stringify({ items: [] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+    })
+  }
+  assert.deepEqual(
+    await requestLovableAdminReadEndpoint({ endpoint, adminBearer: 'sandbox-admin-token' }, requester),
+    { items: [] },
+  )
+  assert.equal(observed.path, '/api/admin/tenants')
+  assert.equal(observed.init.method, 'GET')
+  assert.equal(observed.init.credentials, 'omit')
+  assert.equal(observed.init.cache, 'no-store')
+  assert.equal(observed.init.redirect, 'error')
+  assert.equal(observed.init.headers.Authorization, 'Bearer sandbox-admin-token')
+})
+
+test('real Admin request fails closed for an invalid token or unmapped endpoint', async () => {
+  const [endpoint] = resolveLovableAdminReadEndpoints('/admin/tenants', context)
+  await assert.rejects(
+    requestLovableAdminReadEndpoint({ endpoint, adminBearer: 'bad\nvalue' }),
+    /valid administrator bearer/,
+  )
+  await assert.rejects(
+    requestLovableAdminReadEndpoint({
+      endpoint: { operationId: 'unsafe', method: 'GET', path: '/v1/cards/products' },
+      adminBearer: 'sandbox-admin-token',
+    }),
+    /mapped read-only Admin endpoints/,
   )
 })
 
