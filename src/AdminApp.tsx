@@ -443,7 +443,7 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
           {error && <div className="inline-error page-error"><Unplug />{error}</div>}
           {unavailable[active] ? <Unavailable {...unavailable[active]!} /> : null}
           {active === 'subsystems' && <DataCard section={{ title: 'FastLink 子系统能力地图', description: '状态依据当前 Railway Backend 正式 Controller 合同，不依据演示数据。', value: capabilityRows }} query={query} />}
-          {active === 'tenants' && <TenantWorkspace session={session} tenants={tenants} selectedTenantId={tenantId} invalidateSession={invalidateSession} onCreated={() => void load()} />}
+          {active === 'tenants' && <TenantWorkspace session={session} tenants={tenants} selectedTenantId={tenantId} invalidateSession={invalidateSession} onCreated={(tenant) => { setTenants((current) => [tenant, ...current.filter((item) => item.id !== tenant.id)]); setTenantId(tenant.id) }} />}
           {active === 'permissions' && <Permissions session={session} />}
           {active === 'programs' && <CardConfigurationPanel session={session} tenantId={tenantId} onCardCreated={() => undefined} />}
           {active === 'cardcenter' && <CardConfigurationPanel session={session} tenantId={tenantId} onCardCreated={() => undefined} />}
@@ -469,7 +469,7 @@ function TenantWorkspace({ session, tenants, selectedTenantId, invalidateSession
   tenants: Tenant[]
   selectedTenantId: string
   invalidateSession: (expectedAccessToken: string) => void
-  onCreated: () => void
+  onCreated: (tenant: Tenant) => void
 }) {
   const [detail, setDetail] = useState<Tenant | null>(null)
   const [busy, setBusy] = useState(false)
