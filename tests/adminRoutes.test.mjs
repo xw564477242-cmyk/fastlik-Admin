@@ -107,3 +107,15 @@ test('tenant readiness route uses the same encoded tenant boundary', () => {
     '/admin/tenants/tenant%23partner/integrations/readiness',
   )
 })
+
+test('card product update route preserves tenant and product identifier boundaries', () => {
+  assert.equal(
+    adminRoutes.cardProduct('tenant/one', 'product/one?environment=PRODUCTION'),
+    '/admin/tenants/tenant%2Fone/card-products/product%2Fone%3Fenvironment%3DPRODUCTION',
+  )
+})
+
+test('tenant fee policy routes stay inside the encoded tenant boundary', () => {
+  assert.equal(adminRoutes.feePolicy('tenant/one'), '/admin/tenants/tenant%2Fone/fee-policy')
+  assert.equal(adminRoutes.referralCap('tenant/one'), '/admin/tenants/tenant%2Fone/fee-policy/referral-cap')
+})
