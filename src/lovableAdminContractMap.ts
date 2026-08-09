@@ -50,6 +50,7 @@ export type LovableAdminContractContext = Readonly<{
   tenantId: string
   environment: LovableAdminEnvironment
   cardId?: string
+  productId?: string
   userId?: string
 }>
 
@@ -220,7 +221,7 @@ export const resolveLovableAdminReadEndpoints = (
 }
 
 export const resolveLovableAdminWriteEndpoint = (
-  operation: 'createTenant' | 'createCardProductTemplate' | 'createCardApplication' | 'setCardFeeMode',
+  operation: 'createTenant' | 'createCardProductTemplate' | 'updateCardProductTemplate' | 'createCardApplication' | 'setCardFeeMode',
   context: LovableAdminContractContext,
 ): LovableAdminEndpoint => {
   assertLovableAdminEnvironment(context.environment)
@@ -228,6 +229,10 @@ export const resolveLovableAdminWriteEndpoint = (
   if (operation === 'createTenant') return endpoint(operation, '/api/admin/tenants', 'POST')
   const tenantRoot = relativeTenantPath(requireTenantId(context.tenantId))
   if (operation === 'createCardProductTemplate') return endpoint(operation, `${tenantRoot}/card-products`, 'POST')
+  if (operation === 'updateCardProductTemplate') {
+    const productId = requireLookupId('Card product template', context.productId)
+    return endpoint(operation, `${tenantRoot}/card-products/${encodeURIComponent(productId)}`, 'PUT')
+  }
   if (operation === 'createCardApplication') return endpoint(operation, `${tenantRoot}/card-applications`, 'POST')
   const cardId = requireLookupId('Card fee configuration', context.cardId)
   return endpoint(operation, `${tenantRoot}/cards/${encodeURIComponent(cardId)}/fees`, 'PUT')

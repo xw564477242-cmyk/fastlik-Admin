@@ -214,6 +214,8 @@ export const adminRoutes = {
     `/admin/tenants/${segment(tenantId)}`,
   cardProducts: (tenantId: string) =>
     `${adminRoutes.tenant(tenantId)}/card-products`,
+  cardProduct: (tenantId: string, productId: string) =>
+    `${adminRoutes.cardProducts(tenantId)}/${segment(productId)}`,
   cardApplications: (tenantId: string) =>
     `${adminRoutes.tenant(tenantId)}/card-applications`,
   readiness: (tenantId: string) =>
