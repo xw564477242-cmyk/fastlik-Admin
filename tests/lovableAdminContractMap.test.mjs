@@ -98,12 +98,13 @@ test('real Admin request fails closed for an invalid token or unmapped endpoint'
   )
 })
 
-test('five Phase 1 writes map only to relative SANDBOX Admin endpoints', () => {
+test('six Phase 1 writes map only to relative SANDBOX Admin endpoints', () => {
   assert.deepEqual(resolveLovableAdminWriteEndpoint('createTenant', context), { operationId: 'createTenant', method: 'POST', path: '/api/admin/tenants' })
   assert.deepEqual(resolveLovableAdminWriteEndpoint('createCardProductTemplate', context), { operationId: 'createCardProductTemplate', method: 'POST', path: '/api/admin/tenants/tenant-a/card-products' })
   assert.deepEqual(resolveLovableAdminWriteEndpoint('updateCardProductTemplate', { ...context, productId: 'product-1' }), { operationId: 'updateCardProductTemplate', method: 'PUT', path: '/api/admin/tenants/tenant-a/card-products/product-1' })
   assert.deepEqual(resolveLovableAdminWriteEndpoint('createCardApplication', context), { operationId: 'createCardApplication', method: 'POST', path: '/api/admin/tenants/tenant-a/card-applications' })
   assert.deepEqual(resolveLovableAdminWriteEndpoint('setCardFeeMode', context), { operationId: 'setCardFeeMode', method: 'PUT', path: '/api/admin/tenants/tenant-a/cards/card-1/fees' })
+  assert.deepEqual(resolveLovableAdminWriteEndpoint('setTenantReferralCap', context), { operationId: 'setTenantReferralCap', method: 'PUT', path: '/api/admin/tenants/tenant-a/fee-policy/referral-cap' })
   assert.throws(() => resolveLovableAdminWriteEndpoint('createTenant', { ...context, environment: 'TEST' }), /restricted to SANDBOX/)
   assert.throws(() => resolveLovableAdminWriteEndpoint('createTenant', { ...context, environment: 'PRODUCTION' }), /only in SANDBOX or TEST/)
 })
