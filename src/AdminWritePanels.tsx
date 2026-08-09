@@ -57,7 +57,10 @@ export function CardConfigurationPanel({ session, tenantId, onCardCreated }: { s
         })
         setMessage(`模板 ${updated.code} 已更新；费率上限、双边备忘分录与审计差异均已记录。`)
       } else {
-        const created = await productionApi.createCardProduct(DEFAULT_API, session.accessToken, tenantId, product)
+        const created = await productionApi.createCardProduct(DEFAULT_API, session.accessToken, tenantId, {
+          code: product.code, name: product.name, cardType: product.cardType, currency: product.currency,
+          ...Object.fromEntries(feeFields.map(([key]) => [key, product[key]])) as Required<CardFeeValues>,
+        })
         setMessage(`模板 ${created.code} 已保存并完成全局上限校验。`)
       }
       setProduct(emptyProduct()); await loadTemplates(true)

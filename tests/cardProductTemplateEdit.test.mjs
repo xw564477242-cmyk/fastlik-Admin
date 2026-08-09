@@ -17,3 +17,9 @@ test('template update keeps the immutable code and requires an audited reason', 
   assert.match(panel, /disabled=\{Boolean\(product\.id\)\}/)
   assert.match(panel, /required minLength=\{8\} maxLength=\{240\}/)
 })
+
+test('template creation omits edit-only id and reason fields from the POST payload', () => {
+  assert.match(panel, /createCardProduct\(DEFAULT_API, session\.accessToken, tenantId, \{/)
+  assert.match(panel, /code: product\.code, name: product\.name, cardType: product\.cardType, currency: product\.currency/)
+  assert.doesNotMatch(panel, /createCardProduct\(DEFAULT_API, session\.accessToken, tenantId, product\)/)
+})
