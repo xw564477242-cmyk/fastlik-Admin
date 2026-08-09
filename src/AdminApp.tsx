@@ -156,10 +156,6 @@ const unavailable: Partial<Record<NavId, { title: string; detail: string }>> = {
     title: 'Unavailable · Backend Contract Missing',
     detail: '原白标 / OEM / ODM 页面设计已保留，但 Railway Backend 当前没有白标项目、品牌配置或交付任务的正式读取接口。',
   },
-  programs: {
-    title: 'Unavailable · Backend Contract Missing',
-    detail: 'Railway Backend 已有单卡生命周期合同，但没有可供 Admin 使用的卡项目列表读取合同；本页不会恢复旧卡项目种子数据。',
-  },
   revenue: {
     title: 'Unavailable · Backend Contract Missing',
     detail: 'Railway Backend 当前没有费率模板、账单或收入分成的正式读取接口；本页不会显示历史演示收入。',
@@ -344,7 +340,7 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
   }, [session.user.tenantId, token])
 
   const load = useCallback(async () => {
-    if (!tenantId || unavailable[active] || ['cardcenter', 'cardhistory', 'operations', 'permissions', 'subsystems', 'funds'].includes(active)) {
+    if (!tenantId || unavailable[active] || ['programs', 'cardcenter', 'cardhistory', 'operations', 'permissions', 'subsystems', 'funds'].includes(active)) {
       setSections([])
       setError('')
       return
@@ -449,12 +445,13 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
           {active === 'subsystems' && <DataCard section={{ title: 'FastLink 子系统能力地图', description: '状态依据当前 Railway Backend 正式 Controller 合同，不依据演示数据。', value: capabilityRows }} query={query} />}
           {active === 'tenants' && <TenantWorkspace session={session} tenants={tenants} selectedTenantId={tenantId} invalidateSession={invalidateSession} onCreated={() => void load()} />}
           {active === 'permissions' && <Permissions session={session} />}
+          {active === 'programs' && <CardConfigurationPanel session={session} tenantId={tenantId} onCardCreated={() => undefined} />}
           {active === 'cardcenter' && <CardConfigurationPanel session={session} tenantId={tenantId} onCardCreated={() => undefined} />}
           {active === 'cardcenter' && <CardWorkspace session={session} tenantId={tenantId} mode="card" invalidateSession={invalidateSession} />}
           {active === 'cardhistory' && <CardWorkspace session={session} tenantId={tenantId} mode="history" invalidateSession={invalidateSession} />}
           {active === 'operations' && <OperationsWorkspace session={session} tenantId={tenantId} onUnauthorized={onLogout} invalidateSession={invalidateSession} />}
           {active === 'funds' && <TreasuryReconciliationWorkspace session={session} tenantId={tenantId} runtimeEnvironment={runtimeConfig.environment} invalidateSession={invalidateSession} />}
-          {!unavailable[active] && !['tenants', 'subsystems', 'permissions', 'cardcenter', 'cardhistory', 'operations', 'funds'].includes(active) && (
+          {!unavailable[active] && !['tenants', 'subsystems', 'permissions', 'programs', 'cardcenter', 'cardhistory', 'operations', 'funds'].includes(active) && (
             <>
               <PageHeading title={current.label} tenant={selectedTenant?.brandName || tenantId} source={source} busy={busy} refresh={() => void load()} />
               {busy && !sections.length ? <Loading /> : sections.map((section) => <DataCard key={section.title} section={section} query={query} />)}
