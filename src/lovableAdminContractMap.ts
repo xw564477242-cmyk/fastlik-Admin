@@ -119,6 +119,7 @@ export const LOVABLE_ADMIN_CONTRACTS: readonly LovableAdminContract[] = Object.f
     [
       '/api/admin/tenants/:tenantId/wallet/operations?environment=:environment&limit=25&offset=0',
       '/api/admin/tenants/:tenantId/wallet/transactions?environment=:environment&limit=100',
+      '/api/admin/tenants/:tenantId/wallet/asset-summary?environment=:environment&customerId=:customerId?',
     ],
     ['fund movement writes', 'digital-asset fee and referral settlement detail'],
   ),
@@ -208,6 +209,7 @@ export const resolveLovableAdminReadEndpoints = (
       return Object.freeze([
         endpoint('listWalletOperations', `${tenantRoot}/wallet/operations?${environmentQuery(environment)}&limit=25&offset=0`),
         endpoint('listWalletTransactions', `${tenantRoot}/wallet/transactions?${environmentQuery(environment)}&limit=100`),
+        endpoint('getWalletAssetSummary', `${tenantRoot}/wallet/asset-summary?${environmentQuery(environment)}`),
       ])
     case '/admin/treasury':
       return Object.freeze([

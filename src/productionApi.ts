@@ -8,6 +8,7 @@ import { MAX_TREASURY_FUNDS_INSTRUCTION_JSON_BYTES } from './treasuryFundsInstru
 import { MAX_WALLET_OPERATION_LIST_JSON_BYTES } from './walletOperationListContract'
 import { adminKycPath, MAX_ADMIN_KYC_JSON_BYTES, parseAdminKycResponse, type AdminKycEnvironment, type AdminKycRecord } from './adminKycContract'
 import { MAX_TENANT_DETAIL_JSON_BYTES, parseTenantDetailResponse, type TenantDetail } from './tenantDetailContract'
+import { MAX_WALLET_ASSET_SUMMARY_JSON_BYTES, parseWalletAssetSummaryResponse, type WalletAssetSummary, type WalletAssetSummaryEnvironment } from './walletAssetSummaryContract'
 
 export const DEFAULT_API = runtimeConfig.apiUrl
 export type { DataSource } from './adminRoutes'
@@ -165,8 +166,9 @@ export const productionApi={
  accounts:(_base:string,key:string,tenantId:string,environment:DataSource,signal?:AbortSignal)=>apiRequest<WalletAccount[]>(`/admin/tenants/${tenantId}/ledger/accounts?${query(environment)}`,key,'GET',undefined,jsonResponsePolicy,signal),
  journals:(_base:string,key:string,tenantId:string,environment:DataSource,signal?:AbortSignal)=>apiRequest<Journal[]>(`/admin/tenants/${tenantId}/ledger/journals?${query(environment)}`,key,'GET',undefined,jsonResponsePolicy,signal),
  walletOperations:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,query:AdminWalletOperationQuery,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.walletOperations(tenantId,environment,query),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_WALLET_OPERATION_LIST_JSON_BYTES},signal),
- walletTransactions:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(adminRoutes.walletTransactions(tenantId,environment),key),
- walletOperation:(_base:string,key:string,tenantId:string,operationId:string,environment:DataSource)=>apiRequest<unknown>(adminRoutes.walletOperation(tenantId,operationId,environment),key),
+  walletTransactions:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(adminRoutes.walletTransactions(tenantId,environment),key),
+ walletAssetSummary:async(_base:string,key:string,tenantId:string,environment:WalletAssetSummaryEnvironment,customerId?:string,signal?:AbortSignal):Promise<WalletAssetSummary>=>parseWalletAssetSummaryResponse(await apiRequest<string>(adminRoutes.walletAssetSummary(tenantId,environment,customerId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_WALLET_ASSET_SUMMARY_JSON_BYTES},signal),{tenantId,environment,customerId}),
+  walletOperation:(_base:string,key:string,tenantId:string,operationId:string,environment:DataSource)=>apiRequest<unknown>(adminRoutes.walletOperation(tenantId,operationId,environment),key),
  contamination:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Contamination>(`/admin/tenants/${tenantId}/operations/mock-contamination?${query(environment)}`,key),
  merchants:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Page<Merchant>>(`/admin/tenants/${tenantId}/merchants?${query(environment)}&limit=100`,key),
  merchantPayments:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Page<MerchantPayment>>(`/admin/tenants/${tenantId}/merchant/payments?${query(environment)}&limit=100`,key),

@@ -246,6 +246,17 @@ export const adminRoutes = {
   ) => `${adminRoutes.tenant(tenantId)}/wallet/operations?${walletOperationQuery(environment, query)}`,
   walletTransactions: (tenantId: string, environment: DataSource) =>
     `${adminRoutes.tenant(tenantId)}/wallet/transactions?${environmentQuery(environment)}&limit=100`,
+  walletAssetSummary: (
+    tenantId: string,
+    environment: Extract<DataSource, 'SANDBOX' | 'TEST'>,
+    customerId?: string,
+  ) => {
+    if (!(environment === 'SANDBOX' || environment === 'TEST')) throw new Error('Wallet asset summary environment is invalid')
+    if (customerId !== undefined && !/^[A-Za-z0-9_-]{2,100}$/.test(customerId)) throw new Error('Wallet asset summary customer is invalid')
+    const params = new URLSearchParams({ environment })
+    if (customerId) params.set('customerId', customerId)
+    return `${adminRoutes.tenant(tenantId)}/wallet/asset-summary?${params.toString()}`
+  },
   walletOperation: (tenantId: string, operationId: string, environment: DataSource) =>
     `${adminRoutes.tenant(tenantId)}/wallet/operations/${segment(operationId)}?${environmentQuery(environment)}`,
   card: (tenantId: string, cardId: string) =>

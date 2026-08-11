@@ -176,3 +176,15 @@ test('tenant and product Lovable surfaces bind only to current DEV OpenAPI contr
   assert.equal(product?.status, 'PARTIAL_READ_WRITE')
   assert.deepEqual(product?.unmappedCapabilities, ['chain enablement configuration'])
 })
+
+test('Funds binds the current DEV asset summary read without promoting SANDBOX writes', () => {
+  const endpoints = resolveLovableAdminReadEndpoints('/admin/funds', context)
+  assert.deepEqual(endpoints.map(({ operationId, method, path }) => ({ operationId, method, path })), [
+    { operationId: 'listWalletOperations', method: 'GET', path: '/api/admin/tenants/tenant-a/wallet/operations?environment=SANDBOX&limit=25&offset=0' },
+    { operationId: 'listWalletTransactions', method: 'GET', path: '/api/admin/tenants/tenant-a/wallet/transactions?environment=SANDBOX&limit=100' },
+    { operationId: 'getWalletAssetSummary', method: 'GET', path: '/api/admin/tenants/tenant-a/wallet/asset-summary?environment=SANDBOX' },
+  ])
+  const funds = LOVABLE_ADMIN_CONTRACTS.find(({ surface }) => surface === '/admin/funds')
+  assert.equal(funds?.status, 'PARTIAL_READ_ONLY')
+  assert.equal(funds?.unmappedCapabilities.includes('fund movement writes'), true)
+})
