@@ -218,6 +218,8 @@ export const adminRoutes = {
     `${adminRoutes.cardProducts(tenantId)}/${segment(productId)}`,
   feePolicy: (tenantId: string) =>
     `${adminRoutes.tenant(tenantId)}/fee-policy`,
+  feeCaps: (tenantId: string) =>
+    `${adminRoutes.feePolicy(tenantId)}/caps`,
   referralCap: (tenantId: string) =>
     `${adminRoutes.feePolicy(tenantId)}/referral-cap`,
   cardApplications: (tenantId: string) =>
