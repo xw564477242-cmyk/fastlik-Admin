@@ -8,6 +8,8 @@ import { MAX_TREASURY_FUNDS_INSTRUCTION_JSON_BYTES } from './treasuryFundsInstru
 import { MAX_WALLET_OPERATION_LIST_JSON_BYTES } from './walletOperationListContract'
 import { adminKycPath, MAX_ADMIN_KYC_JSON_BYTES, parseAdminKycResponse, type AdminKycEnvironment, type AdminKycRecord } from './adminKycContract'
 import { MAX_TENANT_DETAIL_JSON_BYTES, parseTenantDetailResponse, type TenantDetail } from './tenantDetailContract'
+import { MAX_WALLET_ASSET_SUMMARY_JSON_BYTES, parseWalletAssetSummaryResponse, type WalletAssetSummary, type WalletAssetSummaryEnvironment } from './walletAssetSummaryContract'
+import { MAX_FX_CONVERSION_JSON_BYTES, parseFxConversionResponse, type FxConversion, type FxConversionEnvironment } from './fxConversionContract'
 
 export const DEFAULT_API = runtimeConfig.apiUrl
 export type { DataSource } from './adminRoutes'
@@ -20,6 +22,7 @@ export type Health = {
 export type AdminSession = {accessToken:string;tokenType:'Bearer';expiresInSeconds:number;expiresAt:string;user:{id:string;email:string;tenantId:string;environment:'SANDBOX'|'TEST'|'UAT'|'PRODUCTION';roles:string[];permissions:string[]}}
 export type Tenant = TenantDetail
 export type CardFeeValues={cardIssueFee?:string;cardMonthlyFee?:string;usdtDepositRate?:string;cardSpendRate?:string;assetWithdrawRate?:string;cashWithdrawRate?:string;thirdPartyPayRate?:string;referralFeeRate?:string}
+export type TenantFeeCapValues=Required<Omit<CardFeeValues,'referralFeeRate'>>
 export type CardProductTemplate=CardFeeValues&{id:string;tenantId:string;environment:'SANDBOX';code:string;name:string;cardType:'VIRTUAL'|'PHYSICAL';currency:string;active:boolean}
 export type UpdatedCardProductTemplate=CardProductTemplate&{journalId:string;externalProviderCalled:false}
 export type TenantFeePolicy={id:string;version:number;active:boolean;referralFeeRateCap:string;referralFeeRateDefault:string;platformReferralFeeRateCap:string;caps:Required<CardFeeValues>;effectiveAt:string}
@@ -150,22 +153,25 @@ export const productionApi={
  tenants:(_base:string,token:string)=>apiRequest<Tenant[]>('/admin/tenants',token),
  createTenant:(_base:string,token:string,body:{legalName:string;brandName:string;slug:string;initialAdminEmail:string})=>apiRequest<Tenant&{initialization:Record<string,string>}>('/admin/tenants',token,'POST',body),
  tenant:async(_base:string,token:string,tenantId:string,environment:Tenant['environment'],signal?:AbortSignal):Promise<Tenant>=>parseTenantDetailResponse(await apiRequest<string>(adminRoutes.tenant(tenantId),token,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TENANT_DETAIL_JSON_BYTES},signal),tenantId,environment),
- readiness:(_base:string,token:string,tenantId:string)=>apiRequest<IntegrationReadiness>(adminRoutes.readiness(tenantId),token),
+ readiness:(_base:string,token:string,tenantId:string,signal?:AbortSignal)=>apiRequest<IntegrationReadiness>(adminRoutes.readiness(tenantId),token,'GET',undefined,jsonResponsePolicy,signal),
  treasury:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<{generatedAt:string;positions:TreasuryPosition[]}>(`/admin/tenants/${tenantId}/dashboards/treasury?${query(environment)}`,key),
  settlementDashboard:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Record<string,unknown>>(`/admin/tenants/${tenantId}/dashboards/settlement?${query(environment)}`,key),
  riskDashboard:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Record<string,unknown>>(`/admin/tenants/${tenantId}/dashboards/risk?${query(environment)}`,key),
  reconciliation:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Reconciliation>(`/admin/tenants/${tenantId}/settlement/reconciliation?${query(environment)}`,key),
- trialBalance:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<TrialBalance[]>(`/admin/tenants/${tenantId}/ledger/trial-balance?${query(environment)}`,key),
+ trialBalance:(_base:string,key:string,tenantId:string,environment:DataSource,signal?:AbortSignal)=>apiRequest<TrialBalance[]>(`/admin/tenants/${tenantId}/ledger/trial-balance?${query(environment)}`,key,'GET',undefined,jsonResponsePolicy,signal),
  treasuryLiquidity:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryLiquidity(tenantId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_RECONCILIATION_JSON_BYTES},signal),
  treasuryReconciliation:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryReconciliation(tenantId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_RECONCILIATION_JSON_BYTES},signal),
  treasuryTrialBalance:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryTrialBalance(tenantId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_RECONCILIATION_JSON_BYTES},signal),
  treasuryDailyClosing:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryDailyClosing(tenantId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_RECONCILIATION_JSON_BYTES},signal),
  treasuryFundsInstruction:(_base:string,key:string,tenantId:string,operationId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryFundsInstruction(tenantId,operationId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_FUNDS_INSTRUCTION_JSON_BYTES},signal),
- accounts:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<WalletAccount[]>(`/admin/tenants/${tenantId}/ledger/accounts?${query(environment)}`,key),
- journals:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Journal[]>(`/admin/tenants/${tenantId}/ledger/journals?${query(environment)}`,key),
+ accounts:(_base:string,key:string,tenantId:string,environment:DataSource,signal?:AbortSignal)=>apiRequest<WalletAccount[]>(`/admin/tenants/${tenantId}/ledger/accounts?${query(environment)}`,key,'GET',undefined,jsonResponsePolicy,signal),
+ journals:(_base:string,key:string,tenantId:string,environment:DataSource,signal?:AbortSignal)=>apiRequest<Journal[]>(`/admin/tenants/${tenantId}/ledger/journals?${query(environment)}`,key,'GET',undefined,jsonResponsePolicy,signal),
  walletOperations:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,query:AdminWalletOperationQuery,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.walletOperations(tenantId,environment,query),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_WALLET_OPERATION_LIST_JSON_BYTES},signal),
- walletTransactions:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(adminRoutes.walletTransactions(tenantId,environment),key),
- walletOperation:(_base:string,key:string,tenantId:string,operationId:string,environment:DataSource)=>apiRequest<unknown>(adminRoutes.walletOperation(tenantId,operationId,environment),key),
+ walletAccountHistory:(_base:string,key:string,tenantId:string,accountId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,query:AdminWalletOperationQuery,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.walletAccountHistory(tenantId,accountId,environment,query),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_WALLET_OPERATION_LIST_JSON_BYTES},signal),
+ walletFxConversion:async(_base:string,key:string,tenantId:string,conversionId:string,environment:FxConversionEnvironment,signal?:AbortSignal):Promise<FxConversion>=>parseFxConversionResponse(await apiRequest<string>(adminRoutes.walletFxConversion(tenantId,conversionId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_FX_CONVERSION_JSON_BYTES},signal),{conversionId,environment}),
+  walletTransactions:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(adminRoutes.walletTransactions(tenantId,environment),key),
+ walletAssetSummary:async(_base:string,key:string,tenantId:string,environment:WalletAssetSummaryEnvironment,customerId?:string,signal?:AbortSignal):Promise<WalletAssetSummary>=>parseWalletAssetSummaryResponse(await apiRequest<string>(adminRoutes.walletAssetSummary(tenantId,environment,customerId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_WALLET_ASSET_SUMMARY_JSON_BYTES},signal),{tenantId,environment,customerId}),
+  walletOperation:(_base:string,key:string,tenantId:string,operationId:string,environment:DataSource)=>apiRequest<unknown>(adminRoutes.walletOperation(tenantId,operationId,environment),key),
  contamination:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Contamination>(`/admin/tenants/${tenantId}/operations/mock-contamination?${query(environment)}`,key),
  merchants:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Page<Merchant>>(`/admin/tenants/${tenantId}/merchants?${query(environment)}&limit=100`,key),
  merchantPayments:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Page<MerchantPayment>>(`/admin/tenants/${tenantId}/merchant/payments?${query(environment)}&limit=100`,key),
@@ -173,10 +179,11 @@ export const productionApi={
  events:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/events?${query(environment)}`,key),
  adminKyc:async(_base:string,key:string,tenantId:string,environment:AdminKycEnvironment,userId:string,signal?:AbortSignal):Promise<AdminKycRecord>=>parseAdminKycResponse(await apiRequest<string>(adminKycPath(tenantId,userId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_ADMIN_KYC_JSON_BYTES},signal),userId),
  cardSnapshot:(_base:string,key:string,tenantId:string,cardId:string,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.cardSnapshot(tenantId,cardId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES},signal),
- cardProducts:(_base:string,key:string,tenantId:string)=>apiRequest<CardProductTemplate[]>(adminRoutes.cardProducts(tenantId),key),
+ cardProducts:(_base:string,key:string,tenantId:string,signal?:AbortSignal)=>apiRequest<CardProductTemplate[]>(adminRoutes.cardProducts(tenantId),key,'GET',undefined,jsonResponsePolicy,signal),
  createCardProduct:(_base:string,key:string,tenantId:string,body:{code:string;name:string;cardType:'VIRTUAL'|'PHYSICAL';currency:string}&CardFeeValues)=>apiRequest<CardProductTemplate>(adminRoutes.cardProducts(tenantId),key,'POST',body),
  updateCardProduct:(_base:string,key:string,tenantId:string,productId:string,body:{name:string;cardType:'VIRTUAL'|'PHYSICAL';currency:string;reason:string}&CardFeeValues)=>apiRequest<UpdatedCardProductTemplate>(adminRoutes.cardProduct(tenantId,productId),key,'PUT',body),
- feePolicy:(_base:string,key:string,tenantId:string)=>apiRequest<TenantFeePolicy>(adminRoutes.feePolicy(tenantId),key),
+ feePolicy:(_base:string,key:string,tenantId:string,signal?:AbortSignal)=>apiRequest<TenantFeePolicy>(adminRoutes.feePolicy(tenantId),key,'GET',undefined,jsonResponsePolicy,signal),
+ setFeeCaps:(_base:string,key:string,tenantId:string,body:TenantFeeCapValues&{reason:string})=>apiRequest<UpdatedTenantFeePolicy>(adminRoutes.feeCaps(tenantId),key,'PUT',body),
  setReferralCap:(_base:string,key:string,tenantId:string,body:{referralFeeRateCap:string;reason:string})=>apiRequest<UpdatedTenantFeePolicy>(adminRoutes.referralCap(tenantId),key,'PUT',body),
  createCardApplication:(_base:string,key:string,tenantId:string,body:{customerId:string;productTemplateId:string;alias?:string;openingFee?:string;feeAdjustmentReason?:string;idempotencyKey:string})=>apiRequest<CardApplication>(adminRoutes.cardApplications(tenantId),key,'POST',body),
  setCardFees:(_base:string,key:string,tenantId:string,cardId:string,body:({mode:'INHERIT';reason:string}|({mode:'OVERRIDE';reason:string}&Required<CardFeeValues>)))=>apiRequest<{mode:'INHERIT'|'OVERRIDE';effective:unknown}>(adminRoutes.cardFees(tenantId,cardId),key,'PUT',body),

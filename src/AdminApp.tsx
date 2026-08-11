@@ -107,6 +107,10 @@ import {
   parseAdminCardTimelinePage,
 } from './cardTimelineContract'
 import { TreasuryReconciliationWorkspace } from './TreasuryReconciliationWorkspace'
+import { LedgerWorkspace } from './LedgerWorkspace'
+import { DigitalAssetFundsWorkspace } from './DigitalAssetFundsWorkspace'
+import { WalletAccountHistoryWorkspace } from './WalletAccountHistoryWorkspace'
+import { FxConversionWorkspace } from './FxConversionWorkspace'
 
 type NavId =
   | 'overview'
@@ -450,7 +454,7 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
           {active === 'cardcenter' && <CardWorkspace session={session} tenantId={tenantId} mode="card" invalidateSession={invalidateSession} />}
           {active === 'cardhistory' && <CardWorkspace session={session} tenantId={tenantId} mode="history" invalidateSession={invalidateSession} />}
           {active === 'operations' && <OperationsWorkspace session={session} tenantId={tenantId} onUnauthorized={onLogout} invalidateSession={invalidateSession} />}
-          {active === 'funds' && <TreasuryReconciliationWorkspace session={session} tenantId={tenantId} runtimeEnvironment={runtimeConfig.environment} invalidateSession={invalidateSession} />}
+          {active === 'funds' && <OperationsWorkspace session={session} tenantId={tenantId} onUnauthorized={onLogout} invalidateSession={invalidateSession} surface="funds" />}
           {!unavailable[active] && !['tenants', 'subsystems', 'permissions', 'programs', 'cardcenter', 'cardhistory', 'operations', 'funds'].includes(active) && (
             <>
               <PageHeading title={current.label} tenant={selectedTenant?.brandName || tenantId} source={source} busy={busy} refresh={() => void load()} />
@@ -472,6 +476,7 @@ function TenantWorkspace({ session, tenants, selectedTenantId, invalidateSession
   onCreated: (tenant: Tenant) => void
 }) {
   const [detail, setDetail] = useState<Tenant | null>(null)
+  const [detailSections, setDetailSections] = useState<DataSection[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const controller = useRef<AbortController | null>(null)
@@ -492,10 +497,21 @@ function TenantWorkspace({ session, tenants, selectedTenantId, invalidateSession
     setBusy(true)
     setError('')
     setDetail(null)
+    setDetailSections([])
     try {
-      const value = await productionApi.tenant(DEFAULT_API, session.accessToken, tenantId, environment, request.signal)
+      const [value, readiness, products, feePolicy] = await Promise.all([
+        productionApi.tenant(DEFAULT_API, session.accessToken, tenantId, environment, request.signal),
+        productionApi.readiness(DEFAULT_API, session.accessToken, tenantId, request.signal),
+        productionApi.cardProducts(DEFAULT_API, session.accessToken, tenantId, request.signal),
+        productionApi.feePolicy(DEFAULT_API, session.accessToken, tenantId, request.signal),
+      ])
       if (!request.signal.aborted && mountedScopeRef.current === requestScope) {
         setDetail(value)
+        setDetailSections([
+          { title: 'Integration Readiness', description: `GET /admin/tenants/${tenantId}/integrations/readiness`, value: readiness },
+          { title: 'Card Product Templates', description: `GET /admin/tenants/${tenantId}/card-products`, value: products },
+          { title: 'Tenant Fee Policy', description: `GET /admin/tenants/${tenantId}/fee-policy`, value: feePolicy },
+        ])
       }
     } catch (error) {
       if (!request.signal.aborted && mountedScopeRef.current === requestScope) {
@@ -510,6 +526,7 @@ function TenantWorkspace({ session, tenants, selectedTenantId, invalidateSession
   useEffect(() => {
     controller.current?.abort()
     setDetail(null)
+    setDetailSections([])
     setError('')
     setBusy(false)
   }, [mountedScope])
@@ -525,6 +542,7 @@ function TenantWorkspace({ session, tenants, selectedTenantId, invalidateSession
       ['Tenant ID', detail.id], ['Legal name', detail.legalName], ['Brand name', detail.brandName], ['Slug', detail.slug],
       ['Status', detail.status], ['Environment', detail.environment], ['Created at', detail.createdAt], ['Updated at', detail.updatedAt],
     ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></article>}
+    {detail && detailSections.map((section) => <DataCard key={section.title} section={section} query="" />)}
   </>
 }
 
@@ -899,15 +917,17 @@ function CardWorkspace({ session, tenantId, mode, invalidateSession }: { session
   return <><PageHeading title={mode === 'card' ? 'Card Center' : 'Card History'} tenant={tenantId} source={source} busy={Boolean(display.busy)} disabled={!workspaceReadAllowed} description={mode === 'history' ? `${tenantId} · 手动刷新只有在全部页面通过合同校验后才原子替换最后 verified snapshot。` : `${tenantId} · 详情、余额、限额只读取持久化 snapshot；瞬态失败保留最后 verified 对象。`} refresh={() => { if (scopeIsCurrent && workspaceReadAllowed) void run(mode === 'card' ? 'read' : 'history') }} />{mode === 'history' && !historySessionAllowed && <section className="unavailable" data-card-timeline-blocked="environment-or-session"><AlertTriangle /><div><h3>Card Timeline Gate Closed</h3><p>只允许当前有效的 SANDBOX 或 TEST Admin Session；不会向 UAT 或 PRODUCTION 发出请求。</p></div></section>}{mode === 'card' && !snapshotSessionAllowed && <section className="unavailable" data-card-snapshot-blocked="environment-session-or-tenant"><AlertTriangle /><div><h3>Card Snapshot Gate Closed</h3><p>只允许当前有效的 home-tenant SANDBOX 或 TEST Admin Session；不会向跨租户、UAT 或 PRODUCTION 发出请求。</p></div></section>}<section className="lookup-panel"><div><span>REAL CARD ID REQUIRED</span><h3>{mode === 'card' ? '卡片持久化快照与生命周期控制' : '卡片生命周期审计'}</h3><p>必须输入真实 Card ID；切换管理员会话、租户、环境、页面或 Card ID 会立即清除旧响应。</p></div><form onSubmit={(event) => { event.preventDefault(); if (scopeIsCurrent && workspaceReadAllowed) void run(mode === 'card' ? 'read' : 'history') }}><input value={display.cardId} disabled={!scopeIsCurrent} onChange={(event) => changeCardId(event.target.value)} placeholder="输入 Railway 数据库中的 Card ID" /><button disabled={!scopeIsCurrent || !workspaceReadAllowed || Boolean(display.busy)}><Search />查询</button></form>{mode === 'card' && <><div className="action-row"><button disabled={!scopeIsCurrent || !workspaceReadAllowed || !display.cardId || Boolean(display.busy)} onClick={() => void run('balance')}>读取余额快照</button><button disabled={!scopeIsCurrent || !workspaceReadAllowed || !display.cardId || Boolean(display.busy)} onClick={() => void run('limits')}>读取限额快照</button><button disabled={!scopeIsCurrent || !workspaceReadAllowed || !display.cardId || Boolean(display.busy)} onClick={() => void run('freeze')}>Freeze</button><button disabled={!scopeIsCurrent || !workspaceReadAllowed || !display.cardId || Boolean(display.busy)} onClick={() => void run('unfreeze')}>Unfreeze</button></div><div className="card-transaction-filters"><label>状态<select value={transactionQuery.status} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionStatus(event.target.value as AdminCardTransactionQuery['status'])}><option value="ALL">ALL</option>{ADMIN_CARD_TRANSACTION_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select></label><label>类型<select value={transactionQuery.type ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionType(event.target.value ? event.target.value as AdminCardTransactionQuery['type'] : undefined)}><option value="">全部</option>{ADMIN_CARD_TRANSACTION_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select></label><label>币种<input maxLength={3} value={transactionQuery.currency ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ currency: event.target.value.toUpperCase() || undefined })} placeholder="USD" /></label><label>开始日期<input type="date" value={transactionQuery.from ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ from: event.target.value || undefined })} /></label><label>结束日期<input type="date" value={transactionQuery.to ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ to: event.target.value || undefined })} /></label><label>每页<select value={transactionQuery.limit} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ limit: Number(event.target.value) })}><option value={10}>10</option><option value={25}>25</option></select></label><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('transactions')}>读取交易</button></div></>}</section>{display.error && <div className="inline-error page-error"><AlertTriangle />{display.error}</div>}{display.view?.empty && <section className="empty-state"><Search /><h3>NO CARD EVENTS</h3><p>当前 Card 没有可显示的公开生命周期事件。</p></section>}{display.view && !display.view.empty && (display.view.kind === 'TIMELINE' ? <DataCard section={{ title: 'Lifecycle Timeline', description, value: display.view.value }} query="" /> : <CardReadOnlyPanel view={display.view} description={description} />)}{mode === 'card' && hasTransactionResults && <CardTransactionsPanel feed={visibleTransactionFeed} selected={selectedTransaction} busy={Boolean(display.busy)} select={(transactionId) => void selectTransaction(transactionId)} next={() => { if (visibleTransactionFeed.nextCursor) void run('transactions', visibleTransactionFeed.nextCursor) }} />}{mode === 'card' && transactionsLoaded && !hasTransactionResults && visibleTransactionFeed.scope === collectionScope && display.busy !== 'transactions' && transactionFeed.scope === collectionScope && <section className="empty-state card-transaction-empty"><Search /><h3>NO CARD TRANSACTIONS</h3><p>当前筛选条件下没有可显示的公开交易。</p></section>}</>
 }
 
-function OperationsWorkspace({ session, tenantId, onUnauthorized, invalidateSession }: { session: AdminSession; tenantId: string; onUnauthorized: () => void; invalidateSession: (expectedAccessToken: string) => void }) {
-  const [tab, setTab] = useState<'wallet' | 'wallet-transactions' | 'operation' | 'user' | 'trace'>('wallet')
+type OperationsTab = 'wallet' | 'wallet-transactions' | 'digital-assets' | 'account-history' | 'fx-conversion' | 'treasury' | 'ledger' | 'operation' | 'user' | 'trace'
+
+function OperationsWorkspace({ session, tenantId, onUnauthorized, invalidateSession, surface = 'operations' }: { session: AdminSession; tenantId: string; onUnauthorized: () => void; invalidateSession: (expectedAccessToken: string) => void; surface?: 'operations' | 'funds' }) {
+  const [tab, setTab] = useState<OperationsTab>('wallet')
   const [lookup, setLookup] = useState('')
   const [sections, setSections] = useState<DataSection[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [operationDetail, setOperationDetail] = useState<WalletOperationDetailState>(idleWalletOperationDetail)
   const source = session.user.environment as DataSource
-  const requestScope = `${tenantId}\u0000${source}\u0000${tab}`
+  const requestScope = `${tenantId}\u0000${source}\u0000${surface}\u0000${tab}`
   const requestGate = useRef(createRequestGate(requestScope))
   syncRequestScope(requestGate.current, requestScope)
   const run = async () => {
@@ -972,8 +992,8 @@ function OperationsWorkspace({ session, tenantId, onUnauthorized, invalidateSess
     setSections([])
     setError('')
     setBusy(false)
-  }, [tenantId, tab, source]) // eslint-disable-line react-hooks/exhaustive-deps
-  const switchTab = (next: 'wallet' | 'wallet-transactions' | 'operation' | 'user' | 'trace') => {
+  }, [tenantId, tab, source, surface]) // eslint-disable-line react-hooks/exhaustive-deps
+  const switchTab = (next: OperationsTab) => {
     invalidateRequests(requestGate.current)
     setTab(next)
     setLookup('')
@@ -984,5 +1004,43 @@ function OperationsWorkspace({ session, tenantId, onUnauthorized, invalidateSess
   }
   const placeholder = tab === 'operation' ? '真实 Wallet Operation ID' : '8–128 位 Trace ID'
   const lookupTab = tab === 'operation' || tab === 'trace'
-  return <>{lookupTab && <PageHeading title="终端用户运营" tenant={tenantId} source={source} busy={busy} refresh={() => void run()} />}<div className="workspace-tabs"><button className={tab === 'wallet' ? 'active' : ''} onClick={() => switchTab('wallet')}>Wallet Operations</button><button className={tab === 'wallet-transactions' ? 'active' : ''} onClick={() => switchTab('wallet-transactions')}>Wallet Transactions</button><button className={tab === 'operation' ? 'active' : ''} onClick={() => switchTab('operation')}>Operation Detail</button><button className={tab === 'user' ? 'active' : ''} onClick={() => switchTab('user')}>User / KYC</button><button className={tab === 'trace' ? 'active' : ''} onClick={() => switchTab('trace')}>Trace ID</button></div>{tab === 'wallet' && <WalletOperationsWorkspace session={session} tenantId={tenantId} />}{tab === 'wallet-transactions' && <WalletTransactionsWorkspace session={session} tenantId={tenantId} onUnauthorized={onUnauthorized} />}{lookupTab && <section className="lookup-panel compact"><input value={lookup} onChange={(event) => setLookup(event.target.value)} placeholder={placeholder} /><button disabled={busy} onClick={() => void run()}><ChevronRight />查询</button></section>}{tab === 'user' && <AdminKycPanel session={session} tenantId={tenantId} runtimeEnvironment={runtimeConfig.environment} readKyc={productionApi.adminKyc} invalidateSession={invalidateSession} />}{error && <div className="inline-error page-error"><AlertTriangle />{error}</div>}{operationDetail.status === 'LOADING' && <Loading />}{operationDetail.status === 'NOT_FOUND' && <section className="empty-state"><Search /><h3>WALLET OPERATION NOT FOUND</h3><p>{operationDetail.message}</p></section>}{operationDetail.status === 'CONTRACT_ERROR' && <div className="inline-error page-error"><AlertTriangle />Backend Wallet Operation contract error · {operationDetail.message}</div>}{operationDetail.status === 'ERROR' && <div className="inline-error page-error"><AlertTriangle />{operationDetail.message}</div>}{operationDetail.status === 'SUCCESS' && <><DataCard section={{ title: 'Wallet Operation', description: `${source} · Validated operation identity, status, asset and amount`, value: [operationDetail.value.operation] }} query="" /><DataCard section={{ title: 'Wallet Accounts', description: 'Validated source and destination account summary', value: operationDetail.value.accounts }} query="" /><DataCard section={{ title: 'Journal Summary', description: 'Validated journal and entry counts; raw entries are not rendered', value: operationDetail.value.journals }} query="" /><DataCard section={{ title: 'Treasury Summary', description: 'Validated treasury position for the operation asset', value: operationDetail.value.treasury ? [operationDetail.value.treasury] : [] }} query="" /></>}{tab === 'trace' && (busy && !sections.length ? <Loading /> : sections.map((section) => <DataCard key={section.title} section={section} query="" />))}</>
+  return <>
+    {lookupTab && <PageHeading title="终端用户运营" tenant={tenantId} source={source} busy={busy} refresh={() => void run()} />}
+    <div className="workspace-tabs" data-admin-surface={surface}>
+      <button className={tab === 'wallet' ? 'active' : ''} onClick={() => switchTab('wallet')}>Wallet Operations</button>
+      <button className={tab === 'wallet-transactions' ? 'active' : ''} onClick={() => switchTab('wallet-transactions')}>Wallet Transactions</button>
+      {surface === 'funds' ? <>
+        <button className={tab === 'digital-assets' ? 'active' : ''} onClick={() => switchTab('digital-assets')}>Digital Assets</button>
+        <button className={tab === 'account-history' ? 'active' : ''} onClick={() => switchTab('account-history')}>Account History</button>
+        <button className={tab === 'fx-conversion' ? 'active' : ''} onClick={() => switchTab('fx-conversion')}>FX Detail</button>
+        <button className={tab === 'treasury' ? 'active' : ''} onClick={() => switchTab('treasury')}>Treasury & Reconciliation</button>
+        <button className={tab === 'ledger' ? 'active' : ''} onClick={() => switchTab('ledger')}>Ledger</button>
+      </> : <>
+        <button className={tab === 'operation' ? 'active' : ''} onClick={() => switchTab('operation')}>Operation Detail</button>
+        <button className={tab === 'user' ? 'active' : ''} onClick={() => switchTab('user')}>User / KYC</button>
+        <button className={tab === 'trace' ? 'active' : ''} onClick={() => switchTab('trace')}>Trace ID</button>
+      </>}
+    </div>
+    {tab === 'wallet' && <WalletOperationsWorkspace session={session} tenantId={tenantId} />}
+    {tab === 'wallet-transactions' && <WalletTransactionsWorkspace session={session} tenantId={tenantId} onUnauthorized={onUnauthorized} />}
+    {tab === 'digital-assets' && surface === 'funds' && <DigitalAssetFundsWorkspace session={session} tenantId={tenantId} invalidateSession={invalidateSession} />}
+    {tab === 'account-history' && surface === 'funds' && <WalletAccountHistoryWorkspace session={session} tenantId={tenantId} invalidateSession={invalidateSession} />}
+    {tab === 'fx-conversion' && surface === 'funds' && <FxConversionWorkspace session={session} tenantId={tenantId} invalidateSession={invalidateSession} />}
+    {tab === 'treasury' && surface === 'funds' && <TreasuryReconciliationWorkspace session={session} tenantId={tenantId} runtimeEnvironment={runtimeConfig.environment} invalidateSession={invalidateSession} />}
+    {tab === 'ledger' && surface === 'funds' && <LedgerWorkspace session={session} tenantId={tenantId} invalidateSession={invalidateSession} />}
+    {lookupTab && <section className="lookup-panel compact"><input value={lookup} onChange={(event) => setLookup(event.target.value)} placeholder={placeholder} /><button disabled={busy} onClick={() => void run()}><ChevronRight />查询</button></section>}
+    {tab === 'user' && <AdminKycPanel session={session} tenantId={tenantId} runtimeEnvironment={runtimeConfig.environment} readKyc={productionApi.adminKyc} invalidateSession={invalidateSession} />}
+    {error && <div className="inline-error page-error"><AlertTriangle />{error}</div>}
+    {operationDetail.status === 'LOADING' && <Loading />}
+    {operationDetail.status === 'NOT_FOUND' && <section className="empty-state"><Search /><h3>WALLET OPERATION NOT FOUND</h3><p>{operationDetail.message}</p></section>}
+    {operationDetail.status === 'CONTRACT_ERROR' && <div className="inline-error page-error"><AlertTriangle />Backend Wallet Operation contract error · {operationDetail.message}</div>}
+    {operationDetail.status === 'ERROR' && <div className="inline-error page-error"><AlertTriangle />{operationDetail.message}</div>}
+    {operationDetail.status === 'SUCCESS' && <>
+      <DataCard section={{ title: 'Wallet Operation', description: `${source} · Validated operation identity, status, asset and amount`, value: [operationDetail.value.operation] }} query="" />
+      <DataCard section={{ title: 'Wallet Accounts', description: 'Validated source and destination account summary', value: operationDetail.value.accounts }} query="" />
+      <DataCard section={{ title: 'Journal Summary', description: 'Validated journal and entry counts; raw entries are not rendered', value: operationDetail.value.journals }} query="" />
+      <DataCard section={{ title: 'Treasury Summary', description: 'Validated treasury position for the operation asset', value: operationDetail.value.treasury ? [operationDetail.value.treasury] : [] }} query="" />
+    </>}
+    {tab === 'trace' && (busy && !sections.length ? <Loading /> : sections.map((section) => <DataCard key={section.title} section={section} query="" />))}
+  </>
 }

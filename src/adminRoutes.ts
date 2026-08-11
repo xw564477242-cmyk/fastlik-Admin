@@ -5,6 +5,13 @@ export const ADMIN_WALLET_OPERATION_TYPES = [
   'WITHDRAWAL',
   'TREASURY_RESERVE',
   'FX_CONVERSION',
+  'CARD_MONTHLY_FEE',
+  'CARD_CASH_WITHDRAWAL',
+  'DIGITAL_ASSET_WITHDRAWAL',
+  'REFERRAL_SETTLEMENT',
+  'CARD_ISSUANCE_FEE',
+  'CARD_SPEND',
+  'THIRD_PARTY_PAYMENT',
 ] as const
 export const ADMIN_WALLET_OPERATION_STATUSES = [
   'PROCESSING',
@@ -218,6 +225,8 @@ export const adminRoutes = {
     `${adminRoutes.cardProducts(tenantId)}/${segment(productId)}`,
   feePolicy: (tenantId: string) =>
     `${adminRoutes.tenant(tenantId)}/fee-policy`,
+  feeCaps: (tenantId: string) =>
+    `${adminRoutes.feePolicy(tenantId)}/caps`,
   referralCap: (tenantId: string) =>
     `${adminRoutes.feePolicy(tenantId)}/referral-cap`,
   cardApplications: (tenantId: string) =>
@@ -242,8 +251,37 @@ export const adminRoutes = {
     environment: Extract<DataSource, 'SANDBOX' | 'TEST'>,
     query: AdminWalletOperationQuery,
   ) => `${adminRoutes.tenant(tenantId)}/wallet/operations?${walletOperationQuery(environment, query)}`,
+  walletAccountHistory: (
+    tenantId: string,
+    accountId: string,
+    environment: Extract<DataSource, 'SANDBOX' | 'TEST'>,
+    query: AdminWalletOperationQuery,
+  ) => {
+    if (!/^[A-Za-z0-9._:-]{2,128}$/.test(accountId)) throw new Error('Wallet account is invalid')
+    return `${adminRoutes.tenant(tenantId)}/wallet/accounts/${segment(accountId)}/history?${walletOperationQuery(environment, query)}`
+  },
+  walletFxConversion: (
+    tenantId: string,
+    conversionId: string,
+    environment: Extract<DataSource, 'SANDBOX' | 'TEST'>,
+  ) => {
+    if (!(environment === 'SANDBOX' || environment === 'TEST')) throw new Error('FX conversion environment is invalid')
+    if (!/^[A-Za-z0-9._:-]{2,128}$/.test(conversionId)) throw new Error('FX conversion is invalid')
+    return `${adminRoutes.tenant(tenantId)}/wallet/fx/conversions/${segment(conversionId)}?${environmentQuery(environment)}`
+  },
   walletTransactions: (tenantId: string, environment: DataSource) =>
     `${adminRoutes.tenant(tenantId)}/wallet/transactions?${environmentQuery(environment)}&limit=100`,
+  walletAssetSummary: (
+    tenantId: string,
+    environment: Extract<DataSource, 'SANDBOX' | 'TEST'>,
+    customerId?: string,
+  ) => {
+    if (!(environment === 'SANDBOX' || environment === 'TEST')) throw new Error('Wallet asset summary environment is invalid')
+    if (customerId !== undefined && !/^[A-Za-z0-9_-]{2,100}$/.test(customerId)) throw new Error('Wallet asset summary customer is invalid')
+    const params = new URLSearchParams({ environment })
+    if (customerId) params.set('customerId', customerId)
+    return `${adminRoutes.tenant(tenantId)}/wallet/asset-summary?${params.toString()}`
+  },
   walletOperation: (tenantId: string, operationId: string, environment: DataSource) =>
     `${adminRoutes.tenant(tenantId)}/wallet/operations/${segment(operationId)}?${environmentQuery(environment)}`,
   card: (tenantId: string, cardId: string) =>

@@ -117,5 +117,6 @@ test('card product update route preserves tenant and product identifier boundari
 
 test('tenant fee policy routes stay inside the encoded tenant boundary', () => {
   assert.equal(adminRoutes.feePolicy('tenant/one'), '/admin/tenants/tenant%2Fone/fee-policy')
+  assert.equal(adminRoutes.feeCaps('tenant/one'), '/admin/tenants/tenant%2Fone/fee-policy/caps')
   assert.equal(adminRoutes.referralCap('tenant/one'), '/admin/tenants/tenant%2Fone/fee-policy/referral-cap')
 })
