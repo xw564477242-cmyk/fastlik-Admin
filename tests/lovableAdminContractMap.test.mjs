@@ -196,4 +196,13 @@ test('Funds binds the current DEV asset summary read without promoting SANDBOX w
     },
   )
   assert.throws(() => resolveLovableAdminReadEndpoints('/admin/funds', { ...context, accountId: '../account' }), /valid identifier/)
+  assert.deepEqual(
+    resolveLovableAdminReadEndpoints('/admin/funds', { ...context, conversionId: 'conversion-1' }).at(-1),
+    {
+      operationId: 'getFxConversion',
+      method: 'GET',
+      path: '/api/admin/tenants/tenant-a/wallet/fx/conversions/conversion-1?environment=SANDBOX',
+    },
+  )
+  assert.throws(() => resolveLovableAdminReadEndpoints('/admin/funds', { ...context, conversionId: '../conversion' }), /valid identifier/)
 })

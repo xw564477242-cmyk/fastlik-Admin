@@ -51,6 +51,7 @@ export type LovableAdminContractContext = Readonly<{
   tenantId: string
   environment: LovableAdminEnvironment
   accountId?: string
+  conversionId?: string
   cardId?: string
   productId?: string
   userId?: string
@@ -122,6 +123,7 @@ export const LOVABLE_ADMIN_CONTRACTS: readonly LovableAdminContract[] = Object.f
       '/api/admin/tenants/:tenantId/wallet/transactions?environment=:environment&limit=100',
       '/api/admin/tenants/:tenantId/wallet/asset-summary?environment=:environment&customerId=:customerId?',
       '/api/admin/tenants/:tenantId/wallet/accounts/:accountId/history?environment=:environment&limit=25&offset=0',
+      '/api/admin/tenants/:tenantId/wallet/fx/conversions/:conversionId?environment=:environment',
     ],
     ['fund movement writes', 'digital-asset fee and referral settlement detail'],
   ),
@@ -209,11 +211,13 @@ export const resolveLovableAdminReadEndpoints = (
     }
     case '/admin/funds': {
       const accountId = context.accountId === undefined ? undefined : requireLookupId('Wallet account history', context.accountId)
+      const conversionId = context.conversionId === undefined ? undefined : requireLookupId('FX conversion detail', context.conversionId)
       return Object.freeze([
         endpoint('listWalletOperations', `${tenantRoot}/wallet/operations?${environmentQuery(environment)}&limit=25&offset=0`),
         endpoint('listWalletTransactions', `${tenantRoot}/wallet/transactions?${environmentQuery(environment)}&limit=100`),
         endpoint('getWalletAssetSummary', `${tenantRoot}/wallet/asset-summary?${environmentQuery(environment)}`),
         ...(accountId ? [endpoint('getWalletAccountHistory', `${tenantRoot}/wallet/accounts/${encodeURIComponent(accountId)}/history?${environmentQuery(environment)}&limit=25&offset=0`)] : []),
+        ...(conversionId ? [endpoint('getFxConversion', `${tenantRoot}/wallet/fx/conversions/${encodeURIComponent(conversionId)}?${environmentQuery(environment)}`)] : []),
       ])
     }
     case '/admin/treasury':

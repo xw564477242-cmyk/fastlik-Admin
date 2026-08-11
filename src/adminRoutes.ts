@@ -260,6 +260,15 @@ export const adminRoutes = {
     if (!/^[A-Za-z0-9._:-]{2,128}$/.test(accountId)) throw new Error('Wallet account is invalid')
     return `${adminRoutes.tenant(tenantId)}/wallet/accounts/${segment(accountId)}/history?${walletOperationQuery(environment, query)}`
   },
+  walletFxConversion: (
+    tenantId: string,
+    conversionId: string,
+    environment: Extract<DataSource, 'SANDBOX' | 'TEST'>,
+  ) => {
+    if (!(environment === 'SANDBOX' || environment === 'TEST')) throw new Error('FX conversion environment is invalid')
+    if (!/^[A-Za-z0-9._:-]{2,128}$/.test(conversionId)) throw new Error('FX conversion is invalid')
+    return `${adminRoutes.tenant(tenantId)}/wallet/fx/conversions/${segment(conversionId)}?${environmentQuery(environment)}`
+  },
   walletTransactions: (tenantId: string, environment: DataSource) =>
     `${adminRoutes.tenant(tenantId)}/wallet/transactions?${environmentQuery(environment)}&limit=100`,
   walletAssetSummary: (
