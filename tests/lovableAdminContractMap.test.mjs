@@ -12,6 +12,7 @@ const context = Object.freeze({
   tenantId: 'tenant-a',
   environment: 'SANDBOX',
   cardId: 'card-1',
+  productId: 'product-1',
   userId: 'user-1',
 })
 
@@ -98,13 +99,14 @@ test('real Admin request fails closed for an invalid token or unmapped endpoint'
   )
 })
 
-test('six Phase 1 writes map only to relative SANDBOX Admin endpoints', () => {
+test('seven Phase 1 writes map only to relative SANDBOX Admin endpoints', () => {
   assert.deepEqual(resolveLovableAdminWriteEndpoint('createTenant', context), { operationId: 'createTenant', method: 'POST', path: '/api/admin/tenants' })
   assert.deepEqual(resolveLovableAdminWriteEndpoint('createCardProductTemplate', context), { operationId: 'createCardProductTemplate', method: 'POST', path: '/api/admin/tenants/tenant-a/card-products' })
   assert.deepEqual(resolveLovableAdminWriteEndpoint('updateCardProductTemplate', { ...context, productId: 'product-1' }), { operationId: 'updateCardProductTemplate', method: 'PUT', path: '/api/admin/tenants/tenant-a/card-products/product-1' })
   assert.deepEqual(resolveLovableAdminWriteEndpoint('createCardApplication', context), { operationId: 'createCardApplication', method: 'POST', path: '/api/admin/tenants/tenant-a/card-applications' })
   assert.deepEqual(resolveLovableAdminWriteEndpoint('setCardFeeMode', context), { operationId: 'setCardFeeMode', method: 'PUT', path: '/api/admin/tenants/tenant-a/cards/card-1/fees' })
   assert.deepEqual(resolveLovableAdminWriteEndpoint('setTenantReferralCap', context), { operationId: 'setTenantReferralCap', method: 'PUT', path: '/api/admin/tenants/tenant-a/fee-policy/referral-cap' })
+  assert.deepEqual(resolveLovableAdminWriteEndpoint('setTenantFeeCaps', context), { operationId: 'setTenantFeeCaps', method: 'PUT', path: '/api/admin/tenants/tenant-a/fee-policy/caps' })
   assert.throws(() => resolveLovableAdminWriteEndpoint('createTenant', { ...context, environment: 'TEST' }), /restricted to SANDBOX/)
   assert.throws(() => resolveLovableAdminWriteEndpoint('createTenant', { ...context, environment: 'PRODUCTION' }), /only in SANDBOX or TEST/)
 })
@@ -139,12 +141,38 @@ test('identifier-dependent surfaces fail closed when context is incomplete', () 
     () => resolveLovableAdminReadEndpoints('/admin/end-users', { ...context, userId: undefined }),
     /requires a valid identifier/,
   )
+  assert.throws(
+    () => resolveLovableAdminReadEndpoints('/admin/products/$productId', { ...context, productId: undefined }),
+    /requires a valid identifier/,
+  )
 })
 
 test('missing Backend contracts remain fail-closed with no fabricated endpoint', () => {
-  for (const surface of ['/admin/products/$productId', '/admin/chain-config', '/admin/hot-wallets']) {
+  for (const surface of ['/admin/chain-config', '/admin/hot-wallets']) {
     const contract = LOVABLE_ADMIN_CONTRACTS.find((candidate) => candidate.surface === surface)
     assert.equal(contract?.status, 'BLOCKED_MISSING_CONTRACT')
     assert.deepEqual(resolveLovableAdminReadEndpoints(surface, context), [])
   }
+})
+
+test('tenant and product Lovable surfaces bind only to current DEV OpenAPI contracts', () => {
+  assert.deepEqual(
+    resolveLovableAdminReadEndpoints('/admin/tenants/$tenantId', context).map(({ operationId, path }) => ({ operationId, path })),
+    [
+      { operationId: 'getTenant', path: '/api/admin/tenants/tenant-a' },
+      { operationId: 'getTenantReadiness', path: '/api/admin/tenants/tenant-a/integrations/readiness' },
+      { operationId: 'listTenantCardProducts', path: '/api/admin/tenants/tenant-a/card-products' },
+      { operationId: 'getTenantFeePolicy', path: '/api/admin/tenants/tenant-a/fee-policy' },
+    ],
+  )
+  assert.deepEqual(
+    resolveLovableAdminReadEndpoints('/admin/products/$productId', { ...context, productId: 'product-1' }).map(({ operationId, path }) => ({ operationId, path })),
+    [
+      { operationId: 'listCardProductsForDetail', path: '/api/admin/tenants/tenant-a/card-products' },
+      { operationId: 'getCardProductFeePolicy', path: '/api/admin/tenants/tenant-a/fee-policy' },
+    ],
+  )
+  const product = LOVABLE_ADMIN_CONTRACTS.find(({ surface }) => surface === '/admin/products/$productId')
+  assert.equal(product?.status, 'PARTIAL_READ_WRITE')
+  assert.deepEqual(product?.unmappedCapabilities, ['chain enablement configuration'])
 })

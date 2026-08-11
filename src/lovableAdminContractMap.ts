@@ -4,6 +4,7 @@ export type LovableAdminEnvironment = (typeof LOVABLE_ADMIN_ALLOWED_ENVIRONMENTS
 export type LovableAdminContractStatus =
   | 'CONNECTED_READ_WRITE'
   | 'CONNECTED_READ_ONLY'
+  | 'PARTIAL_READ_WRITE'
   | 'PARTIAL_READ_ONLY'
   | 'BLOCKED_MISSING_CONTRACT'
 
@@ -89,8 +90,14 @@ export const LOVABLE_ADMIN_CONTRACTS: readonly LovableAdminContract[] = Object.f
   contract(
     '/admin/tenants/$tenantId',
     'CONNECTED_READ_WRITE',
-    ['/api/admin/tenants/:id', '/api/admin/tenants/:tenantId/integrations/readiness', '/api/admin/tenants/:tenantId/card-products'],
-    ['digital-asset capability writes', 'tenant fee-limit writes'],
+    [
+      '/api/admin/tenants/:id',
+      '/api/admin/tenants/:tenantId/integrations/readiness',
+      '/api/admin/tenants/:tenantId/card-products',
+      '/api/admin/tenants/:tenantId/fee-policy',
+      '/api/admin/tenants/:tenantId/fee-policy/caps',
+    ],
+    ['digital-asset capability writes'],
   ),
   contract(
     '/admin/card-center',
@@ -137,10 +144,16 @@ export const LOVABLE_ADMIN_CONTRACTS: readonly LovableAdminContract[] = Object.f
     ['/api/admin/tenants/:tenantId/users/:userId/kyc?environment=:environment'],
     ['end-user list contract', 'digital-asset wallet detail contract'],
   ),
-  contract('/admin/products/$productId', 'BLOCKED_MISSING_CONTRACT', [], [
-    'product catalogue contract',
-    'digital-asset product configuration contract',
-  ]),
+  contract(
+    '/admin/products/$productId',
+    'PARTIAL_READ_WRITE',
+    [
+      '/api/admin/tenants/:tenantId/card-products',
+      '/api/admin/tenants/:tenantId/card-products/:productId',
+      '/api/admin/tenants/:tenantId/fee-policy',
+    ],
+    ['chain enablement configuration'],
+  ),
   contract('/admin/chain-config', 'BLOCKED_MISSING_CONTRACT', [], [
     'chain configuration read contract',
     'chain configuration write contract',
@@ -177,6 +190,8 @@ export const resolveLovableAdminReadEndpoints = (
       return Object.freeze([
         endpoint('getTenant', tenantRoot),
         endpoint('getTenantReadiness', `${tenantRoot}/integrations/readiness`),
+        endpoint('listTenantCardProducts', `${tenantRoot}/card-products`),
+        endpoint('getTenantFeePolicy', `${tenantRoot}/fee-policy`),
       ])
     case '/admin/card-center': {
       const cardId = requireLookupId('Card Center', context.cardId)
@@ -214,6 +229,11 @@ export const resolveLovableAdminReadEndpoints = (
       ])
     }
     case '/admin/products/$productId':
+      requireLookupId('Card product template', context.productId)
+      return Object.freeze([
+        endpoint('listCardProductsForDetail', `${tenantRoot}/card-products`),
+        endpoint('getCardProductFeePolicy', `${tenantRoot}/fee-policy`),
+      ])
     case '/admin/chain-config':
     case '/admin/hot-wallets':
       return Object.freeze([])
@@ -221,7 +241,7 @@ export const resolveLovableAdminReadEndpoints = (
 }
 
 export const resolveLovableAdminWriteEndpoint = (
-  operation: 'createTenant' | 'createCardProductTemplate' | 'updateCardProductTemplate' | 'createCardApplication' | 'setCardFeeMode' | 'setTenantReferralCap',
+  operation: 'createTenant' | 'createCardProductTemplate' | 'updateCardProductTemplate' | 'createCardApplication' | 'setCardFeeMode' | 'setTenantReferralCap' | 'setTenantFeeCaps',
   context: LovableAdminContractContext,
 ): LovableAdminEndpoint => {
   assertLovableAdminEnvironment(context.environment)
@@ -235,6 +255,7 @@ export const resolveLovableAdminWriteEndpoint = (
   }
   if (operation === 'createCardApplication') return endpoint(operation, `${tenantRoot}/card-applications`, 'POST')
   if (operation === 'setTenantReferralCap') return endpoint(operation, `${tenantRoot}/fee-policy/referral-cap`, 'PUT')
+  if (operation === 'setTenantFeeCaps') return endpoint(operation, `${tenantRoot}/fee-policy/caps`, 'PUT')
   const cardId = requireLookupId('Card fee configuration', context.cardId)
   return endpoint(operation, `${tenantRoot}/cards/${encodeURIComponent(cardId)}/fees`, 'PUT')
 }
