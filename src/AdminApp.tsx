@@ -472,6 +472,7 @@ function TenantWorkspace({ session, tenants, selectedTenantId, invalidateSession
   onCreated: (tenant: Tenant) => void
 }) {
   const [detail, setDetail] = useState<Tenant | null>(null)
+  const [detailSections, setDetailSections] = useState<DataSection[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const controller = useRef<AbortController | null>(null)
@@ -492,10 +493,21 @@ function TenantWorkspace({ session, tenants, selectedTenantId, invalidateSession
     setBusy(true)
     setError('')
     setDetail(null)
+    setDetailSections([])
     try {
-      const value = await productionApi.tenant(DEFAULT_API, session.accessToken, tenantId, environment, request.signal)
+      const [value, readiness, products, feePolicy] = await Promise.all([
+        productionApi.tenant(DEFAULT_API, session.accessToken, tenantId, environment, request.signal),
+        productionApi.readiness(DEFAULT_API, session.accessToken, tenantId, request.signal),
+        productionApi.cardProducts(DEFAULT_API, session.accessToken, tenantId, request.signal),
+        productionApi.feePolicy(DEFAULT_API, session.accessToken, tenantId, request.signal),
+      ])
       if (!request.signal.aborted && mountedScopeRef.current === requestScope) {
         setDetail(value)
+        setDetailSections([
+          { title: 'Integration Readiness', description: `GET /admin/tenants/${tenantId}/integrations/readiness`, value: readiness },
+          { title: 'Card Product Templates', description: `GET /admin/tenants/${tenantId}/card-products`, value: products },
+          { title: 'Tenant Fee Policy', description: `GET /admin/tenants/${tenantId}/fee-policy`, value: feePolicy },
+        ])
       }
     } catch (error) {
       if (!request.signal.aborted && mountedScopeRef.current === requestScope) {
@@ -510,6 +522,7 @@ function TenantWorkspace({ session, tenants, selectedTenantId, invalidateSession
   useEffect(() => {
     controller.current?.abort()
     setDetail(null)
+    setDetailSections([])
     setError('')
     setBusy(false)
   }, [mountedScope])
@@ -525,6 +538,7 @@ function TenantWorkspace({ session, tenants, selectedTenantId, invalidateSession
       ['Tenant ID', detail.id], ['Legal name', detail.legalName], ['Brand name', detail.brandName], ['Slug', detail.slug],
       ['Status', detail.status], ['Environment', detail.environment], ['Created at', detail.createdAt], ['Updated at', detail.updatedAt],
     ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></article>}
+    {detail && detailSections.map((section) => <DataCard key={section.title} section={section} query="" />)}
   </>
 }
 

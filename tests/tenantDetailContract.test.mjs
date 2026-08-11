@@ -34,3 +34,17 @@ test('Admin page exposes a clickable detail flow and bounded GET client', () => 
   assert.match(api, /format:'bounded-text',maxBytes:MAX_TENANT_DETAIL_JSON_BYTES/)
   assert.match(api, /parseTenantDetailResponse/)
 })
+
+test('Lovable tenant detail atomically binds readiness, products and fee policy to the selected tenant scope', () => {
+  const app = readFileSync(new URL('../src/AdminApp.tsx', import.meta.url), 'utf8')
+  const api = readFileSync(new URL('../src/productionApi.ts', import.meta.url), 'utf8')
+  assert.match(app, /const \[value, readiness, products, feePolicy\] = await Promise\.all/)
+  assert.match(app, /productionApi\.readiness\(DEFAULT_API, session\.accessToken, tenantId, request\.signal\)/)
+  assert.match(app, /productionApi\.cardProducts\(DEFAULT_API, session\.accessToken, tenantId, request\.signal\)/)
+  assert.match(app, /productionApi\.feePolicy\(DEFAULT_API, session\.accessToken, tenantId, request\.signal\)/)
+  assert.match(app, /setDetailSections\(\[/)
+  assert.match(app, /detail && detailSections\.map/)
+  assert.match(api, /readiness:\(_base:string,token:string,tenantId:string,signal\?:AbortSignal\)/)
+  assert.match(api, /cardProducts:\(_base:string,key:string,tenantId:string,signal\?:AbortSignal\)/)
+  assert.match(api, /feePolicy:\(_base:string,key:string,tenantId:string,signal\?:AbortSignal\)/)
+})
