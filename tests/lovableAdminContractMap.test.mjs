@@ -187,4 +187,13 @@ test('Funds binds the current DEV asset summary read without promoting SANDBOX w
   const funds = LOVABLE_ADMIN_CONTRACTS.find(({ surface }) => surface === '/admin/funds')
   assert.equal(funds?.status, 'PARTIAL_READ_ONLY')
   assert.equal(funds?.unmappedCapabilities.includes('fund movement writes'), true)
+  assert.deepEqual(
+    resolveLovableAdminReadEndpoints('/admin/funds', { ...context, accountId: 'account-1' }).at(-1),
+    {
+      operationId: 'getWalletAccountHistory',
+      method: 'GET',
+      path: '/api/admin/tenants/tenant-a/wallet/accounts/account-1/history?environment=SANDBOX&limit=25&offset=0',
+    },
+  )
+  assert.throws(() => resolveLovableAdminReadEndpoints('/admin/funds', { ...context, accountId: '../account' }), /valid identifier/)
 })

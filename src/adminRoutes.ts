@@ -5,6 +5,13 @@ export const ADMIN_WALLET_OPERATION_TYPES = [
   'WITHDRAWAL',
   'TREASURY_RESERVE',
   'FX_CONVERSION',
+  'CARD_MONTHLY_FEE',
+  'CARD_CASH_WITHDRAWAL',
+  'DIGITAL_ASSET_WITHDRAWAL',
+  'REFERRAL_SETTLEMENT',
+  'CARD_ISSUANCE_FEE',
+  'CARD_SPEND',
+  'THIRD_PARTY_PAYMENT',
 ] as const
 export const ADMIN_WALLET_OPERATION_STATUSES = [
   'PROCESSING',
@@ -244,6 +251,15 @@ export const adminRoutes = {
     environment: Extract<DataSource, 'SANDBOX' | 'TEST'>,
     query: AdminWalletOperationQuery,
   ) => `${adminRoutes.tenant(tenantId)}/wallet/operations?${walletOperationQuery(environment, query)}`,
+  walletAccountHistory: (
+    tenantId: string,
+    accountId: string,
+    environment: Extract<DataSource, 'SANDBOX' | 'TEST'>,
+    query: AdminWalletOperationQuery,
+  ) => {
+    if (!/^[A-Za-z0-9._:-]{2,128}$/.test(accountId)) throw new Error('Wallet account is invalid')
+    return `${adminRoutes.tenant(tenantId)}/wallet/accounts/${segment(accountId)}/history?${walletOperationQuery(environment, query)}`
+  },
   walletTransactions: (tenantId: string, environment: DataSource) =>
     `${adminRoutes.tenant(tenantId)}/wallet/transactions?${environmentQuery(environment)}&limit=100`,
   walletAssetSummary: (

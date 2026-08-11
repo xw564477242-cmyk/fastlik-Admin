@@ -40,8 +40,21 @@ test('builds the Backend dev route with exact SANDBOX/TEST filters and paginatio
     adminRoutes.walletOperations('tenant/one', 'TEST', query),
     '/admin/tenants/tenant%2Fone/wallet/operations?environment=TEST&status=COMPLETED&type=DEPOSIT&assetCode=USDT&limit=25&offset=0',
   )
+  assert.equal(
+    adminRoutes.walletAccountHistory('tenant/one', 'account:1', 'TEST', { ...query, type: 'CARD_MONTHLY_FEE' }),
+    '/admin/tenants/tenant%2Fone/wallet/accounts/account%3A1/history?environment=TEST&status=COMPLETED&type=CARD_MONTHLY_FEE&assetCode=USDT&limit=25&offset=0',
+  )
   assert.throws(() => adminRoutes.walletOperations('tenant-1', 'PRODUCTION', query), /environment is invalid/)
+  assert.throws(() => adminRoutes.walletAccountHistory('tenant-1', '../account', 'TEST', query), /account is invalid/)
   assert.throws(() => adminRoutes.walletOperations('tenant-1', 'TEST', { ...query, assetCode: 'usd!' }), /asset code is invalid/)
+})
+
+test('accepts all current P1 fee and referral operation types from the frozen OpenAPI enum', () => {
+  for (const type of ['CARD_MONTHLY_FEE', 'CARD_CASH_WITHDRAWAL', 'DIGITAL_ASSET_WITHDRAWAL', 'REFERRAL_SETTLEMENT', 'CARD_ISSUANCE_FEE', 'CARD_SPEND', 'THIRD_PARTY_PAYMENT']) {
+    const typedQuery = Object.freeze({ ...query, type })
+    const parsed = parseAdminWalletOperationPage(page([operation({ type })]), { ...expected, query: typedQuery })
+    assert.equal(parsed.operations[0].type, type)
+  }
 })
 
 test('accepts an exact, ordered, scope-bound Wallet operation page and exposes only safe fields', () => {
