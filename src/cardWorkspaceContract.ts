@@ -97,7 +97,7 @@ export class CardWorkspaceContractError extends Error {
 type ContractCode = CardWorkspaceContractError['code']
 type OwnData = Readonly<Record<string, PropertyDescriptor>>
 
-const invalid = (code: ContractCode): never => { throw new CardWorkspaceContractError(code) }
+function invalid(code: ContractCode): never { throw new CardWorkspaceContractError(code) }
 
 const jsonDepthWithinLimit = (raw: string): boolean => {
   let depth = 0

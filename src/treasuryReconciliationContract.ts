@@ -110,7 +110,7 @@ export class TreasuryReconciliationContractError extends Error {
 }
 
 type OwnData = Readonly<Record<string, PropertyDescriptor>>
-const invalid = (code: ContractCode): never => { throw new TreasuryReconciliationContractError(code) }
+function invalid(code: ContractCode): never { throw new TreasuryReconciliationContractError(code) }
 
 const jsonDepthWithinLimit = (raw: string): boolean => {
   let depth = 0

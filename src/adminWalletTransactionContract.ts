@@ -72,7 +72,7 @@ const PAGE_FIELDS = Object.freeze(['items', 'pagination'] as const)
 const PAGINATION_FIELDS = Object.freeze(['total', 'limit', 'offset', 'hasMore'] as const)
 type OwnData = Readonly<Record<string, PropertyDescriptor>>
 
-const invalid = (message: string): never => { throw new Error(message) }
+function invalid(message: string): never { throw new Error(message) }
 const ownData = (value: unknown, message: string): OwnData => {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) invalid(message)
   return Object.getOwnPropertyDescriptors(value)

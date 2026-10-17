@@ -62,7 +62,7 @@ type TreasuryDashboardState = Readonly<{
   dailyClosing: EndpointState<TreasuryDailyClosingSummary>
 }>
 
-const endpoint = <T,>(status: 'IDLE' | 'LOADING'): EndpointState<T> => Object.freeze({ status })
+const endpoint = (status: 'IDLE' | 'LOADING'): Readonly<{status: 'IDLE' | 'LOADING'}> => Object.freeze({ status })
 const emptyState = (scope: string, loading = false): TreasuryDashboardState => Object.freeze({
   scope,
   busy: loading,

@@ -31,7 +31,9 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { runtimeConfig } from './runtimeConfig'
+import { BuildIdentityLabel } from './BuildIdentityLabel'
 import './card-workspace.css'
+import { B10Workspace } from './B10Workspace'
 import { AdminKycPanel } from './AdminKycPanel'
 import { CardConfigurationPanel, TenantCreatePanel } from './AdminWritePanels'
 import {
@@ -283,7 +285,7 @@ export default function AdminApp() {
           <div className="login-logo">F</div>
           <span>FASTLINK FINANCIAL SAAS</span>
           <h1>运营管理后台</h1>
-          <p>正式 Railway API、真实管理员 Session 与租户级 RBAC。连接失败时不提供 Demo 或 Mock fallback。</p>
+          <p>使用后端管理员会话和租户权限。连接失败时不提供 Demo 或 Mock fallback。</p>
           <div className="login-source"><i />{runtimeConfig.environment} · {DEFAULT_API}</div>
         </section>
         <form className="login-card" onSubmit={login}>
@@ -296,13 +298,13 @@ export default function AdminApp() {
           <label>管理员邮箱<input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" /></label>
           <label>密码<div className="password-field"><KeyRound /><input required minLength={10} type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" /></div></label>
           {loginError && <div className="inline-error"><AlertTriangle />{loginError}</div>}
-          <button disabled={loginBusy}>{loginBusy ? <><LoaderCircle className="spin" />正在连接 Railway…</> : '登录正式后台'}</button>
+          <button disabled={loginBusy}>{loginBusy ? <><LoaderCircle className="spin" />正在连接后端…</> : '登录后台'}</button>
         </form>
       </main>
     )
   }
 
-  return <AuthenticatedAdmin session={session} onLogout={() => void logout()} invalidateSession={invalidateSession} />
+  return <B10Workspace key={session.accessToken} session={session} onLogout={() => void logout()} invalidateSession={invalidateSession} />
 }
 
 function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session: AdminSession; onLogout: () => void; invalidateSession: (expectedAccessToken: string) => void }) {
@@ -437,7 +439,7 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
           <span><i />Data Source: <b>{source}</b></span>
           <span>Tenant: <b>{selectedTenant?.brandName || tenantId}</b></span>
           <span>API: <b>{DEFAULT_API}</b></span>
-          <span>Build: <b>{runtimeConfig.buildSha.slice(0, 12)}</b></span>
+          <BuildIdentityLabel />
         </div>
         <div className="page-content">
           {error && <div className="inline-error page-error"><Unplug />{error}</div>}

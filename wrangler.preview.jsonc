@@ -1,0 +1,38 @@
+{
+  "name": "fastlink-admin-preview-b13",
+  "main": ".preview-build/publish/worker.js",
+  "compatibility_date": "2026-07-25",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "no_bundle": true,
+  "assets": {
+    "binding": "ASSETS",
+    "directory": ".preview-build/publish/public",
+    "run_worker_first": true
+  },
+  "vars": {
+    "FASTLINK_PREVIEW_STATUS": "NOT_BOUND",
+    "FASTLINK_PREVIEW_ORIGIN": "NOT_BOUND",
+    "FASTLINK_BACKEND_ORIGIN": "NOT_BOUND",
+    "FASTLINK_BUILD_SHA": "NOT_BOUND",
+    "FASTLINK_SOURCE_SNAPSHOT": "NOT_BOUND",
+    "FASTLINK_CANDIDATE_ID": "FL-LAUNCH-B13-20261017",
+    "FASTLINK_PREVIEW_EXPIRES_AT": "NOT_BOUND",
+    "FASTLINK_PREVIEW_ACCESS_ISSUER": "NOT_BOUND",
+    "FASTLINK_PREVIEW_ACCESS_AUDIENCE": "NOT_BOUND",
+    "FASTLINK_PREVIEW_ALLOWED_EMAILS_JSON": "NOT_BOUND",
+    "FASTLINK_PREVIEW_ACCESS_JWKS_JSON": "NOT_BOUND"
+  },
+  "workers_dev": false,
+  "preview_urls": false,
+  "rules": [
+    {
+      "type": "ESModule",
+      "globs": [
+        "**/*.js",
+        "**/*.mjs"
+      ]
+    }
+  ]
+}

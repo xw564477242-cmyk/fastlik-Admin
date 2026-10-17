@@ -80,7 +80,7 @@ export class WalletOperationListContractError extends Error {
 }
 
 type OwnData = Readonly<Record<string, PropertyDescriptor>>
-const invalid = (code: ContractCode): never => { throw new WalletOperationListContractError(code) }
+function invalid(code: ContractCode): never { throw new WalletOperationListContractError(code) }
 
 const jsonDepthWithinLimit = (raw: string): boolean => {
   let depth = 0
