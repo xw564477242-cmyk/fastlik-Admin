@@ -95,7 +95,7 @@ export class CardTransactionContractError extends Error {
 }
 
 type OwnData = Readonly<Record<string, PropertyDescriptor>>
-const invalid = (code: ContractCode): never => { throw new CardTransactionContractError(code) }
+function invalid(code: ContractCode): never { throw new CardTransactionContractError(code) }
 
 const jsonDepthWithinLimit = (raw: string): boolean => {
   let depth = 0

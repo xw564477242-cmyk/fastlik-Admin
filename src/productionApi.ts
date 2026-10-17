@@ -1,4 +1,6 @@
+import { previewBrowserRequestAllowed } from './launch/preview-readonly-policy'
 import { runtimeConfig } from './runtimeConfig'
+import { launchAdminRequestAllowed } from './launchReadOnlyContract'
 import { adminRoutes, type AdminCardTransactionQuery, type AdminWalletOperationQuery, type DataSource } from './adminRoutes'
 import { MAX_CARD_WORKSPACE_JSON_BYTES } from './cardWorkspaceContract'
 import { MAX_CARD_TRANSACTION_JSON_BYTES } from './cardTransactionContract'
@@ -86,6 +88,9 @@ const readBoundedResponseText=async(response:Response,maxBytes:number):Promise<s
 }
 
 export async function apiRequest<T>(path:string,token?:string,method='GET',body?:unknown,responsePolicy:ApiResponsePolicy=jsonResponsePolicy,externalSignal?:AbortSignal):Promise<T>{
+  if (runtimeConfig.previewReadOnly && !previewBrowserRequestAllowed(path, method)) throw new Error('Preview business mutation or route refused')
+
+ if(!launchAdminRequestAllowed(path,method.toUpperCase()))throw new ApiError(0,path,'launch-readonly','首发只读后台不支持此业务操作')
  const controller=new AbortController();const timeout=window.setTimeout(()=>controller.abort(),20_000);const trace=newTrace()
  const abortFromCaller=()=>controller.abort()
  if(externalSignal?.aborted)controller.abort()
@@ -142,6 +147,10 @@ async function health(path:string):Promise<Health>{
 
 const query=(environment:DataSource)=>`environment=${encodeURIComponent(environment)}`
 export const productionApi={
+ supportCases:(_base:string,token:string,tenantId:string,traceId:string,signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/support-cases?traceId=${encodeURIComponent(traceId)}`,token,'GET',undefined,jsonResponsePolicy,signal),
+ createSupportCase:(_base:string,token:string,tenantId:string,body:{traceId:string;reason:string},signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/support-cases`,token,'POST',body,jsonResponsePolicy,signal),
+ manageSupportCase:(_base:string,token:string,tenantId:string,id:string,body:{status:string;resolution:string|null;version:number},signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/support-cases/${encodeURIComponent(id)}`,token,'PATCH',body,jsonResponsePolicy,signal),
+ cardSupportAudit:(_base:string,token:string,tenantId:string,traceId:string,signal?:AbortSignal)=>apiRequest<string>(`/admin/tenants/${encodeURIComponent(tenantId)}/operations/card-support/${encodeURIComponent(traceId)}`,token,'GET',undefined,{format:'bounded-text',maxBytes:32768},signal),
  health:(_base:string)=>health('/health'),
  systemReadiness:(_base:string)=>health('/health/readiness'),
  login:(_base:string,tenantId:string,email:string,password:string)=>apiRequest<AdminSession>('/admin/auth/login',undefined,'POST',{tenantId,email,password}),
