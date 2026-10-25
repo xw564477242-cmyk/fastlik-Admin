@@ -1,3 +1,4 @@
+import { MAX_WALLET_ASSET_SUMMARY_JSON_BYTES, parseWalletAssetSummaryResponse, type WalletAssetSummary, type WalletAssetSummaryEnvironment } from './walletAssetSummaryContract'
 import { previewBrowserRequestAllowed } from './launch/preview-readonly-policy'
 import { runtimeConfig } from './runtimeConfig'
 import { launchAdminRequestAllowed } from './launchReadOnlyContract'
@@ -97,7 +98,7 @@ export async function apiRequest<T>(path:string,token?:string,method='GET',body?
  else externalSignal?.addEventListener('abort',abortFromCaller,{once:true})
  try{
   const response=await fetch(`${DEFAULT_API}${path}`,{
-   mode:'cors',credentials:'omit',cache:'no-store',signal:controller.signal,method,
+   mode:'cors',credentials:'same-origin',cache:'no-store',signal:controller.signal,method,
    headers:{Accept:'application/json','X-Trace-Id':trace,...(body?{'Content-Type':'application/json'}:{}),...(token?{Authorization:`Bearer ${token}`}:{})},
    ...(body?{body:JSON.stringify(body)}:{})
   })
@@ -164,14 +165,14 @@ export const productionApi={
  settlementDashboard:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Record<string,unknown>>(`/admin/tenants/${tenantId}/dashboards/settlement?${query(environment)}`,key),
  riskDashboard:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Record<string,unknown>>(`/admin/tenants/${tenantId}/dashboards/risk?${query(environment)}`,key),
  reconciliation:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Reconciliation>(`/admin/tenants/${tenantId}/settlement/reconciliation?${query(environment)}`,key),
- trialBalance:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<TrialBalance[]>(`/admin/tenants/${tenantId}/ledger/trial-balance?${query(environment)}`,key),
+ trialBalance:(_base:string,key:string,tenantId:string,environment:DataSource,signal?:AbortSignal)=>apiRequest<TrialBalance[]>(`/admin/tenants/${tenantId}/ledger/trial-balance?${query(environment)}`,key,'GET',undefined,jsonResponsePolicy,signal),
  treasuryLiquidity:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryLiquidity(tenantId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_RECONCILIATION_JSON_BYTES},signal),
  treasuryReconciliation:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryReconciliation(tenantId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_RECONCILIATION_JSON_BYTES},signal),
  treasuryTrialBalance:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryTrialBalance(tenantId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_RECONCILIATION_JSON_BYTES},signal),
  treasuryDailyClosing:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryDailyClosing(tenantId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_RECONCILIATION_JSON_BYTES},signal),
  treasuryFundsInstruction:(_base:string,key:string,tenantId:string,operationId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryFundsInstruction(tenantId,operationId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_FUNDS_INSTRUCTION_JSON_BYTES},signal),
- accounts:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<WalletAccount[]>(`/admin/tenants/${tenantId}/ledger/accounts?${query(environment)}`,key),
- journals:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Journal[]>(`/admin/tenants/${tenantId}/ledger/journals?${query(environment)}`,key),
+ accounts:(_base:string,key:string,tenantId:string,environment:DataSource,signal?:AbortSignal)=>apiRequest<WalletAccount[]>(`/admin/tenants/${tenantId}/ledger/accounts?${query(environment)}`,key,'GET',undefined,jsonResponsePolicy,signal),
+ journals:(_base:string,key:string,tenantId:string,environment:DataSource,signal?:AbortSignal)=>apiRequest<Journal[]>(`/admin/tenants/${tenantId}/ledger/journals?${query(environment)}`,key,'GET',undefined,jsonResponsePolicy,signal),
  walletOperations:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,query:AdminWalletOperationQuery,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.walletOperations(tenantId,environment,query),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_WALLET_OPERATION_LIST_JSON_BYTES},signal),
  walletTransactions:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(adminRoutes.walletTransactions(tenantId,environment),key),
  walletOperation:(_base:string,key:string,tenantId:string,operationId:string,environment:DataSource)=>apiRequest<unknown>(adminRoutes.walletOperation(tenantId,operationId,environment),key),
@@ -200,4 +201,6 @@ export const productionApi={
  evidence:(_base:string,token:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/evidence?${query(environment)}&limit=100`,token),
  evidenceSummary:(_base:string,token:string,tenantId:string,environment:DataSource)=>apiRequest<EvidenceSummary>(`/admin/tenants/${tenantId}/evidence/summary?${query(environment)}`,token),
  dailyClosing:(_base:string,token:string,tenantId:string,environment:DataSource)=>apiRequest<FinancialOperationalReport>(`/admin/tenants/${tenantId}/settlement/daily-closing?${query(environment)}`,token),
+  walletAccountHistory:(_base:string,key:string,tenantId:string,accountId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,query:AdminWalletOperationQuery,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.walletAccountHistory(tenantId,accountId,environment,query),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_WALLET_OPERATION_LIST_JSON_BYTES},signal),
+  walletAssetSummary:async(_base:string,key:string,tenantId:string,environment:WalletAssetSummaryEnvironment,customerId?:string,signal?:AbortSignal):Promise<WalletAssetSummary>=>parseWalletAssetSummaryResponse(await apiRequest<string>(adminRoutes.walletAssetSummary(tenantId,environment,customerId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_WALLET_ASSET_SUMMARY_JSON_BYTES},signal),{tenantId,environment,customerId}),
 }

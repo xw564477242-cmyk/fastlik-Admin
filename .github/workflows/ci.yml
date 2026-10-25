@@ -23,7 +23,7 @@ jobs:
       - run: npm run build
 
   admin-preview:
-    name: Fixed Admin preview — existing Access capability read only
+    name: Fixed Admin preview — hosted credential binding and release
     if: github.event_name == 'workflow_dispatch' && github.repository == 'xw564477242-cmyk/fastlik-Admin' && github.ref == 'refs/heads/codex/fl-launch-b17-admin-preview-ci-20261025' && github.run_attempt == 1
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -39,12 +39,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Read only the fixed Admin Access application capability
+      - name: Locked public build dependencies (no lifecycle scripts)
+        run: npm ci --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org
+      - name: Build only the accepted full Admin source with this HEAD
+        run: node scripts/build-admin-restored-preview.mjs
+      - name: Install the existing pinned Wrangler version without credentials
+        run: npm install --prefix "$RUNNER_TEMP/fl-b17-wrangler" --no-save --ignore-scripts --no-audit --no-fund wrangler@4.114.0
+      - name: Bind the fixed target, then publish the approved package
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEV_API_TOKEN }}
           HOSTED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEV_ACCOUNT_ID }}
+          WRANGLER_BIN: ${{ runner.temp }}/fl-b17-wrangler/node_modules/.bin/wrangler
           PREVIEW_RESULT_FILE: ${{ runner.temp }}/fl-b17-admin-preview-result.json
-        run: node scripts/admin-access-readonly.mjs
+        run: node scripts/admin-preview-ci.mjs
       - name: Only the non-secret release receipt
         if: always()
         uses: actions/upload-artifact@v4

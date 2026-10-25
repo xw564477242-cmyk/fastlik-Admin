@@ -1,3 +1,6 @@
+import { WalletAccountHistoryWorkspace } from './WalletAccountHistoryWorkspace'
+import { DigitalAssetFundsWorkspace } from './DigitalAssetFundsWorkspace'
+import { LedgerWorkspace } from './LedgerWorkspace'
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
@@ -33,7 +36,6 @@ import {
 import { runtimeConfig } from './runtimeConfig'
 import { BuildIdentityLabel } from './BuildIdentityLabel'
 import './card-workspace.css'
-import { B10Workspace } from './B10Workspace'
 import { AdminKycPanel } from './AdminKycPanel'
 import { CardConfigurationPanel, TenantCreatePanel } from './AdminWritePanels'
 import {
@@ -165,13 +167,13 @@ const unavailable: Partial<Record<NavId, { title: string; detail: string }>> = {
 }
 
 const capabilityRows: JsonRecord[] = [
-  { module: '租户与组织中心', source: 'GET /admin/tenants', state: 'CONNECTED' },
-  { module: '钱包与账本', source: 'GET /wallet/* + /ledger/*', state: 'CONNECTED' },
-  { module: '卡片与发卡', source: 'GET/POST /cards/*', state: 'CONNECTED' },
-  { module: 'Treasury 与清算', source: 'GET /dashboards/* + /settlement/*', state: 'CONNECTED' },
-  { module: '风险与合规', source: 'GET /dashboards/risk', state: 'CONNECTED' },
-  { module: '商户支付', source: 'GET /merchants + /merchant/payments', state: 'CONNECTED' },
-  { module: '开放平台', source: 'GET /api-clients + /events', state: 'CONNECTED' },
+  { module: '租户与组织中心', source: 'GET /admin/tenants', state: 'SOURCE_MAPPED' },
+  { module: '钱包与账本', source: 'GET /wallet/* + /ledger/*', state: 'SOURCE_MAPPED' },
+  { module: '卡片与发卡', source: 'GET/POST /cards/*', state: 'SOURCE_MAPPED' },
+  { module: 'Treasury 与清算', source: 'GET /dashboards/* + /settlement/*', state: 'SOURCE_MAPPED' },
+  { module: '风险与合规', source: 'GET /dashboards/risk', state: 'SOURCE_MAPPED' },
+  { module: '商户支付', source: 'GET /merchants + /merchant/payments', state: 'SOURCE_MAPPED' },
+  { module: '开放平台', source: 'GET /api-clients + /events', state: 'SOURCE_MAPPED' },
   { module: '白标交付', source: 'No formal read endpoint', state: 'UNAVAILABLE' },
   { module: '计费与分成', source: 'No formal read endpoint', state: 'UNAVAILABLE' },
   { module: '角色管理', source: 'Session roles/permissions only', state: 'PARTIAL' },
@@ -179,7 +181,7 @@ const capabilityRows: JsonRecord[] = [
 
 function requestedView(): NavId {
   const value = new URLSearchParams(window.location.search).get('view') as NavId | null
-  return value && nav.some((item) => item.id === value) ? value : 'overview'
+  return value && nav.some((item) => item.id === value) ? value : runtimeConfig.previewReadOnly ? 'cardcenter' : 'overview'
 }
 
 function asRecord(value: unknown): JsonRecord {
@@ -278,6 +280,22 @@ export default function AdminApp() {
     setSession((current) => current?.accessToken === expectedAccessToken ? null : current)
   }, [])
 
+  // Business-session expiry is independent of the continuous preview service.
+  useEffect(() => {
+    if (!session) return
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    const schedule = () => {
+      const remaining = Date.parse(session.expiresAt) - Date.now()
+      if (!Number.isFinite(remaining) || remaining <= 0) {
+        invalidateSession(session.accessToken)
+        return
+      }
+      timeout = setTimeout(schedule, Math.min(remaining, 2_147_483_647))
+    }
+    schedule()
+    return () => clearTimeout(timeout)
+  }, [session, invalidateSession])
+
   if (!session) {
     return (
       <main className="admin-login">
@@ -304,7 +322,7 @@ export default function AdminApp() {
     )
   }
 
-  return <B10Workspace key={session.accessToken} session={session} onLogout={() => void logout()} invalidateSession={invalidateSession} />
+  return <AuthenticatedAdmin key={session.accessToken} session={session} onLogout={() => void logout()} invalidateSession={invalidateSession} />
 }
 
 function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session: AdminSession; onLogout: () => void; invalidateSession: (expectedAccessToken: string) => void }) {
@@ -315,25 +333,32 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
   const [sections, setSections] = useState<DataSection[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [tenantError, setTenantError] = useState('')
   const [query, setQuery] = useState('')
   const source = session.user.environment as DataSource
   const token = session.accessToken
   const selectedTenant = tenants.find((item) => item.id === tenantId)
   const current = nav.find((item) => item.id === active) ?? nav[0]
+  const previewUnconnected = runtimeConfig.previewReadOnly && !unavailable[active]
+    && !['tenants', 'cardcenter', 'cardhistory', 'operations', 'funds', 'permissions', 'subsystems'].includes(active)
 
   useEffect(() => {
     let cancelled = false
     const loadTenants = async () => {
+      setTenantError('')
       try {
-        const result = await productionApi.tenants(DEFAULT_API, token)
+        const result = runtimeConfig.previewReadOnly
+          ? [await productionApi.tenant(DEFAULT_API, token, session.user.tenantId, 'TEST')]
+          : await productionApi.tenants(DEFAULT_API, token)
         if (!cancelled) setTenants(result)
-      } catch {
+      } catch (initialError) {
+        if (runtimeConfig.previewReadOnly) { if (!cancelled) setTenantError(errorText(initialError)); return }
         try {
           if (session.user.environment === 'UAT') throw new Error('Tenant detail is unavailable outside the Backend environment contract')
           const currentTenant = await productionApi.tenant(DEFAULT_API, token, session.user.tenantId, session.user.environment)
           if (!cancelled) setTenants([currentTenant])
         } catch (error) {
-          if (!cancelled) setError(errorText(error))
+          if (!cancelled) setTenantError(errorText(error))
         }
       }
     }
@@ -342,7 +367,7 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
   }, [session.user.tenantId, token])
 
   const load = useCallback(async () => {
-    if (!tenantId || unavailable[active] || ['programs', 'cardcenter', 'cardhistory', 'operations', 'permissions', 'subsystems', 'funds'].includes(active)) {
+    if (previewUnconnected || !tenantId || unavailable[active] || ['programs', 'cardcenter', 'cardhistory', 'operations', 'permissions', 'subsystems', 'funds'].includes(active)) {
       setSections([])
       setError('')
       return
@@ -402,7 +427,7 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
     } finally {
       setBusy(false)
     }
-  }, [active, source, tenantId, tenants, token])
+  }, [active, source, tenantId, tenants, token, previewUnconnected])
 
   useEffect(() => { void load() }, [load])
 
@@ -419,7 +444,7 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
     <div className="app-shell">
       <aside className={`sidebar ${mobile ? 'open' : ''}`}>
         <div className="brand"><div className="brand-mark">F</div><div><b>FastLink</b><span>FINANCIAL SAAS CONTROL</span></div><button className="mobile-close" onClick={() => setMobile(false)}><X /></button></div>
-        <div className="live-badge"><i />{source} · RAILWAY LIVE</div>
+        <div className="live-badge"><i />{source} · {runtimeConfig.previewReadOnly ? 'READ-ONLY PREVIEW' : 'RAILWAY LIVE'}</div>
         <nav>{nav.map(({ id, label, icon: Icon }) => <button key={id} className={active === id ? 'active' : ''} onClick={() => switchPage(id)}><Icon size={18} /><span>{label}</span>{unavailable[id] && <em>!</em>}</button>)}</nav>
         <div className="sidebar-foot"><div className="identity"><b>{session.user.email}</b><span>{session.user.roles.join(', ')}</span></div><button onClick={onLogout}><LogOut size={17} />退出登录</button></div>
       </aside>
@@ -429,7 +454,7 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
           <div className="title-wrap"><button className="menu-btn" onClick={() => setMobile(true)}><Menu /></button><div><h1>{current.label}</h1><p>FastLink Financial SaaS Platform · {source} · Railway API</p></div></div>
           <div className="top-actions">
             <span className="role-badge">{session.user.roles[0] ?? 'ADMIN'}</span>
-            <select className="tenant-select" value={tenantId} onChange={(event) => setTenantId(event.target.value)}>{tenants.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.brandName || tenant.legalName}</option>)}</select>
+            <select className="tenant-select" disabled={runtimeConfig.previewReadOnly} value={tenantId} onChange={(event) => setTenantId(event.target.value)}>{runtimeConfig.previewReadOnly && <option value={session.user.tenantId}>{session.user.tenantId}</option>}{tenants.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.brandName || tenant.legalName}</option>)}</select>
             <label className="search-box"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="筛选当前真实数据…" /></label>
             <button className="icon-btn" disabled={busy} onClick={() => void load()} title={busy ? 'Railway 数据加载中' : '刷新 Railway 数据'}><RefreshCw className={busy ? 'spin' : ''} size={18} /></button>
             <button className="icon-btn" title="通知中心尚无正式读取合同"><Bell size={18} /></button>
@@ -442,17 +467,20 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
           <BuildIdentityLabel />
         </div>
         <div className="page-content">
+          {tenantError && <div role="alert" className="inline-error page-error" data-tenant-read-error><Unplug />{tenantError}</div>}
           {error && <div className="inline-error page-error"><Unplug />{error}</div>}
+          {runtimeConfig.previewReadOnly && <p>完整 Admin 页面已保留；仅显示当前租户已接线的只读结果，菜单可见不代表接口已验收或已获权限。</p>}
+          {previewUnconnected ? <section role="status" className="unavailable"><h2>{current.label}</h2><p>此模块的历史 UI 和 API 映射仍在；当前预览只读链路尚未接通，未发起业务请求，未展示空数据或替代数据。</p></section> : <>
           {unavailable[active] ? <Unavailable {...unavailable[active]!} /> : null}
-          {active === 'subsystems' && <DataCard section={{ title: 'FastLink 子系统能力地图', description: '状态依据当前 Railway Backend 正式 Controller 合同，不依据演示数据。', value: capabilityRows }} query={query} />}
+          {active === 'subsystems' && <DataCard section={{ title: 'FastLink 子系统能力地图', description: '静态源码 API 映射；不代表当前预览可达性或运行验收。', value: capabilityRows }} query={query} />}
           {active === 'tenants' && <TenantWorkspace session={session} tenants={tenants} selectedTenantId={tenantId} invalidateSession={invalidateSession} onCreated={(tenant) => { setTenants((current) => [tenant, ...current.filter((item) => item.id !== tenant.id)]); setTenantId(tenant.id) }} />}
           {active === 'permissions' && <Permissions session={session} />}
-          {active === 'programs' && <CardConfigurationPanel session={session} tenantId={tenantId} onCardCreated={() => undefined} />}
-          {active === 'cardcenter' && <CardConfigurationPanel session={session} tenantId={tenantId} onCardCreated={() => undefined} />}
+          {!runtimeConfig.previewReadOnly && active === 'programs' && <CardConfigurationPanel session={session} tenantId={tenantId} onCardCreated={() => undefined} />}
+          {!runtimeConfig.previewReadOnly && active === 'cardcenter' && <CardConfigurationPanel session={session} tenantId={tenantId} onCardCreated={() => undefined} />}
           {active === 'cardcenter' && <CardWorkspace session={session} tenantId={tenantId} mode="card" invalidateSession={invalidateSession} />}
           {active === 'cardhistory' && <CardWorkspace session={session} tenantId={tenantId} mode="history" invalidateSession={invalidateSession} />}
           {active === 'operations' && <OperationsWorkspace session={session} tenantId={tenantId} onUnauthorized={onLogout} invalidateSession={invalidateSession} />}
-          {active === 'funds' && <TreasuryReconciliationWorkspace session={session} tenantId={tenantId} runtimeEnvironment={runtimeConfig.environment} invalidateSession={invalidateSession} />}
+          {active === 'funds' && <OperationsWorkspace session={session} tenantId={tenantId} onUnauthorized={onLogout} invalidateSession={invalidateSession} surface="funds" />}
           {!unavailable[active] && !['tenants', 'subsystems', 'permissions', 'programs', 'cardcenter', 'cardhistory', 'operations', 'funds'].includes(active) && (
             <>
               <PageHeading title={current.label} tenant={selectedTenant?.brandName || tenantId} source={source} busy={busy} refresh={() => void load()} />
@@ -460,6 +488,7 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
               {!busy && !sections.length && <Empty />}
             </>
           )}
+          </>}
         </div>
       </main>
     </div>
@@ -517,9 +546,9 @@ function TenantWorkspace({ session, tenants, selectedTenantId, invalidateSession
   }, [mountedScope])
   return <>
     <PageHeading title="租户与合作方" tenant={selectedTenantId} source={environment ?? session.user.environment} busy={busy} refresh={() => void open(selectedTenantId)} disabled={!selectedTenantId || !environment} description="点击租户条目读取当前管理员环境中的精确详情合同；切换请求时不保留旧详情。" />
-    <TenantCreatePanel session={session} onCreated={onCreated} />
-    <article className="panel data-panel"><div className="panel-title"><div><h3>Tenant Directory</h3><p>GET /admin/tenants · 仅当前 Admin 环境</p></div><span className="record-count">{tenants.length} RECORDS</span></div>
-      <div className="table-wrap"><table><thead><tr><th>品牌</th><th>法定名称</th><th>Slug</th><th>状态</th><th>环境</th><th>操作</th></tr></thead><tbody>{tenants.map((tenant) => <tr key={tenant.id}><td>{tenant.brandName}</td><td>{tenant.legalName}</td><td>{tenant.slug}</td><td>{tenant.status}</td><td>{tenant.environment}</td><td><button className="primary-btn" disabled={busy} onClick={() => void open(tenant.id)}>查看详情</button></td></tr>)}</tbody></table></div>
+    {!runtimeConfig.previewReadOnly && <TenantCreatePanel session={session} onCreated={onCreated} />}
+    <article className="panel data-panel"><div className="panel-title"><div><h3>Tenant Directory</h3><p>GET /admin/tenants · 仅当前 Admin 环境</p></div><span className="record-count">{runtimeConfig.previewReadOnly && !tenants.length ? 'NOT VERIFIED' : `${tenants.length} RECORDS`}</span></div>
+      {runtimeConfig.previewReadOnly && !tenants.length ? <p role="status">尚未取得当前租户详情，不能将未验证结果视为空目录。</p> : <div className="table-wrap"><table><thead><tr><th>品牌</th><th>法定名称</th><th>Slug</th><th>状态</th><th>环境</th><th>操作</th></tr></thead><tbody>{tenants.map((tenant) => <tr key={tenant.id}><td>{tenant.brandName}</td><td>{tenant.legalName}</td><td>{tenant.slug}</td><td>{tenant.status}</td><td>{tenant.environment}</td><td><button className="primary-btn" disabled={busy} onClick={() => void open(tenant.id)}>查看详情</button></td></tr>)}</tbody></table></div>}
     </article>
     {busy && <Loading />}
     {error && <div className="inline-error page-error"><AlertTriangle />{error}</div>}
@@ -676,9 +705,14 @@ function CardWorkspace({ session, tenantId, mode, invalidateSession }: { session
     : createCardTransactionFeed(collectionScope)
   const historySessionAllowed = timelineSessionScope !== null
   const snapshotSessionAllowed = snapshotSessionScope !== null
-  const workspaceReadAllowed = mode === 'history' ? historySessionAllowed : snapshotSessionAllowed
+  const previewHistoryBlocked = runtimeConfig.previewReadOnly && mode === 'history'
+  const workspaceReadAllowed = !previewHistoryBlocked && (mode === 'history' ? historySessionAllowed : snapshotSessionAllowed)
 
   const run = async (action: CardWorkspaceAction, cursor: string | null = null) => {
+    if (runtimeConfig.previewReadOnly && action !== 'read') {
+      setError('当前预览仅接通卡快照读取；此操作未开放。')
+      return
+    }
     if (!scopeIsCurrent) return
     const id = cardId.trim()
     if (!id) {
@@ -898,18 +932,20 @@ function CardWorkspace({ session, tenantId, mode, invalidateSession }: { session
     ? 'Data Source: Railway Backend · 已验证 10 页/最多 250 条公开事件；服务端仍有后续数据'
     : 'Data Source: Railway Backend · 精确 5 个事件字段，只读且分页链已验证'
   const hasTransactionResults = visibleTransactionFeed.transactions.length > 0
-  return <><PageHeading title={mode === 'card' ? 'Card Center' : 'Card History'} tenant={tenantId} source={source} busy={Boolean(display.busy)} disabled={!workspaceReadAllowed} description={mode === 'history' ? `${tenantId} · 手动刷新只有在全部页面通过合同校验后才原子替换最后 verified snapshot。` : `${tenantId} · 详情、余额、限额只读取持久化 snapshot；瞬态失败保留最后 verified 对象。`} refresh={() => { if (scopeIsCurrent && workspaceReadAllowed) void run(mode === 'card' ? 'read' : 'history') }} />{mode === 'history' && !historySessionAllowed && <section className="unavailable" data-card-timeline-blocked="environment-or-session"><AlertTriangle /><div><h3>Card Timeline Gate Closed</h3><p>只允许当前有效的 SANDBOX 或 TEST Admin Session；不会向 UAT 或 PRODUCTION 发出请求。</p></div></section>}{mode === 'card' && !snapshotSessionAllowed && <section className="unavailable" data-card-snapshot-blocked="environment-session-or-tenant"><AlertTriangle /><div><h3>Card Snapshot Gate Closed</h3><p>只允许当前有效的 home-tenant SANDBOX 或 TEST Admin Session；不会向跨租户、UAT 或 PRODUCTION 发出请求。</p></div></section>}<section className="lookup-panel"><div><span>REAL CARD ID REQUIRED</span><h3>{mode === 'card' ? '卡片持久化快照与生命周期控制' : '卡片生命周期审计'}</h3><p>必须输入真实 Card ID；切换管理员会话、租户、环境、页面或 Card ID 会立即清除旧响应。</p></div><form onSubmit={(event) => { event.preventDefault(); if (scopeIsCurrent && workspaceReadAllowed) void run(mode === 'card' ? 'read' : 'history') }}><input value={display.cardId} disabled={!scopeIsCurrent} onChange={(event) => changeCardId(event.target.value)} placeholder="输入 Railway 数据库中的 Card ID" /><button disabled={!scopeIsCurrent || !workspaceReadAllowed || Boolean(display.busy)}><Search />查询</button></form>{mode === 'card' && <><div className="action-row"><button disabled={!scopeIsCurrent || !workspaceReadAllowed || !display.cardId || Boolean(display.busy)} onClick={() => void run('balance')}>读取余额快照</button><button disabled={!scopeIsCurrent || !workspaceReadAllowed || !display.cardId || Boolean(display.busy)} onClick={() => void run('limits')}>读取限额快照</button><button disabled={!scopeIsCurrent || !workspaceReadAllowed || !display.cardId || Boolean(display.busy)} onClick={() => void run('freeze')}>Freeze</button><button disabled={!scopeIsCurrent || !workspaceReadAllowed || !display.cardId || Boolean(display.busy)} onClick={() => void run('unfreeze')}>Unfreeze</button></div><div className="card-transaction-filters"><label>状态<select value={transactionQuery.status} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionStatus(event.target.value as AdminCardTransactionQuery['status'])}><option value="ALL">ALL</option>{ADMIN_CARD_TRANSACTION_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select></label><label>类型<select value={transactionQuery.type ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionType(event.target.value ? event.target.value as AdminCardTransactionQuery['type'] : undefined)}><option value="">全部</option>{ADMIN_CARD_TRANSACTION_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select></label><label>币种<input maxLength={3} value={transactionQuery.currency ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ currency: event.target.value.toUpperCase() || undefined })} placeholder="USD" /></label><label>开始日期<input type="date" value={transactionQuery.from ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ from: event.target.value || undefined })} /></label><label>结束日期<input type="date" value={transactionQuery.to ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ to: event.target.value || undefined })} /></label><label>每页<select value={transactionQuery.limit} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ limit: Number(event.target.value) })}><option value={10}>10</option><option value={25}>25</option></select></label><button disabled={!scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('transactions')}>读取交易</button></div></>}</section>{display.error && <div className="inline-error page-error"><AlertTriangle />{display.error}</div>}{display.view?.empty && <section className="empty-state"><Search /><h3>NO CARD EVENTS</h3><p>当前 Card 没有可显示的公开生命周期事件。</p></section>}{display.view && !display.view.empty && (display.view.kind === 'TIMELINE' ? <DataCard section={{ title: 'Lifecycle Timeline', description, value: display.view.value }} query="" /> : <CardReadOnlyPanel view={display.view} description={description} />)}{mode === 'card' && hasTransactionResults && <CardTransactionsPanel feed={visibleTransactionFeed} selected={selectedTransaction} busy={Boolean(display.busy)} select={(transactionId) => void selectTransaction(transactionId)} next={() => { if (visibleTransactionFeed.nextCursor) void run('transactions', visibleTransactionFeed.nextCursor) }} />}{mode === 'card' && transactionsLoaded && !hasTransactionResults && visibleTransactionFeed.scope === collectionScope && display.busy !== 'transactions' && transactionFeed.scope === collectionScope && <section className="empty-state card-transaction-empty"><Search /><h3>NO CARD TRANSACTIONS</h3><p>当前筛选条件下没有可显示的公开交易。</p></section>}</>
+  return <><PageHeading title={mode === 'card' ? 'Card Center' : 'Card History'} tenant={tenantId} source={source} busy={Boolean(display.busy)} disabled={!workspaceReadAllowed} description={mode === 'history' ? `${tenantId} · 手动刷新只有在全部页面通过合同校验后才原子替换最后 verified snapshot。` : `${tenantId} · 详情、余额、限额只读取持久化 snapshot；瞬态失败保留最后 verified 对象。`} refresh={() => { if (scopeIsCurrent && workspaceReadAllowed) void run(mode === 'card' ? 'read' : 'history') }} />{runtimeConfig.previewReadOnly && <section role="status" className="unavailable" data-card-read-prerequisites><div><h3>{mode === 'history' ? 'Card History · BLOCKED' : 'Additional Card reads · LIMITED'}</h3><p>{mode === 'history' ? '原版 Card History 查询界面保留；已核验目标库缺少 CardLifecycleEvent / CardEvent，尚无只读路径验收，不发出查询，不当作无事件。' : '卡片基础快照保留。余额快照缺少 CardBalance 读取权限；限额缺少 CardLimit 表；卡交易列表/详情仍缺最小读取及审计权限，不等同 Wallet Transactions 已接线。'}</p></div></section>}{mode === 'history' && !historySessionAllowed && <section className="unavailable" data-card-timeline-blocked="environment-or-session"><AlertTriangle /><div><h3>Card Timeline Gate Closed</h3><p>只允许当前有效的 SANDBOX 或 TEST Admin Session；不会向 UAT 或 PRODUCTION 发出请求。</p></div></section>}{mode === 'card' && !snapshotSessionAllowed && <section className="unavailable" data-card-snapshot-blocked="environment-session-or-tenant"><AlertTriangle /><div><h3>Card Snapshot Gate Closed</h3><p>只允许当前有效的 home-tenant SANDBOX 或 TEST Admin Session；不会向跨租户、UAT 或 PRODUCTION 发出请求。</p></div></section>}<section className="lookup-panel"><div><span>REAL CARD ID REQUIRED</span><h3>{mode === 'card' ? '卡片持久化快照与生命周期控制' : '卡片生命周期审计'}</h3><p>必须输入真实 Card ID；切换管理员会话、租户、环境、页面或 Card ID 会立即清除旧响应。</p></div><form onSubmit={(event) => { event.preventDefault(); if (scopeIsCurrent && workspaceReadAllowed) void run(mode === 'card' ? 'read' : 'history') }}><input value={display.cardId} disabled={!scopeIsCurrent} onChange={(event) => changeCardId(event.target.value)} placeholder="输入 Railway 数据库中的 Card ID" /><button disabled={!scopeIsCurrent || !workspaceReadAllowed || Boolean(display.busy)}><Search />查询</button></form>{mode === 'card' && <><div className="action-row"><button disabled={runtimeConfig.previewReadOnly || !scopeIsCurrent || !workspaceReadAllowed || !display.cardId || Boolean(display.busy)} onClick={() => void run('balance')}>读取余额快照</button><button disabled={runtimeConfig.previewReadOnly || !scopeIsCurrent || !workspaceReadAllowed || !display.cardId || Boolean(display.busy)} onClick={() => void run('limits')}>读取限额快照</button><button disabled={runtimeConfig.previewReadOnly || !scopeIsCurrent || !workspaceReadAllowed || !display.cardId || Boolean(display.busy)} onClick={() => void run('freeze')}>Freeze</button><button disabled={runtimeConfig.previewReadOnly || !scopeIsCurrent || !workspaceReadAllowed || !display.cardId || Boolean(display.busy)} onClick={() => void run('unfreeze')}>Unfreeze</button></div><div className="card-transaction-filters"><label>状态<select value={transactionQuery.status} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionStatus(event.target.value as AdminCardTransactionQuery['status'])}><option value="ALL">ALL</option>{ADMIN_CARD_TRANSACTION_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select></label><label>类型<select value={transactionQuery.type ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionType(event.target.value ? event.target.value as AdminCardTransactionQuery['type'] : undefined)}><option value="">全部</option>{ADMIN_CARD_TRANSACTION_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select></label><label>币种<input maxLength={3} value={transactionQuery.currency ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ currency: event.target.value.toUpperCase() || undefined })} placeholder="USD" /></label><label>开始日期<input type="date" value={transactionQuery.from ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ from: event.target.value || undefined })} /></label><label>结束日期<input type="date" value={transactionQuery.to ?? ''} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ to: event.target.value || undefined })} /></label><label>每页<select value={transactionQuery.limit} disabled={Boolean(display.busy)} onChange={(event) => changeTransactionQuery({ limit: Number(event.target.value) })}><option value={10}>10</option><option value={25}>25</option></select></label><button disabled={runtimeConfig.previewReadOnly || !scopeIsCurrent || !display.cardId || Boolean(display.busy)} onClick={() => void run('transactions')}>读取交易</button></div></>}</section>{display.error && <div className="inline-error page-error"><AlertTriangle />{display.error}</div>}{display.view?.empty && <section className="empty-state"><Search /><h3>NO CARD EVENTS</h3><p>当前 Card 没有可显示的公开生命周期事件。</p></section>}{display.view && !display.view.empty && (display.view.kind === 'TIMELINE' ? <DataCard section={{ title: 'Lifecycle Timeline', description, value: display.view.value }} query="" /> : <CardReadOnlyPanel view={display.view} description={description} />)}{mode === 'card' && hasTransactionResults && <CardTransactionsPanel feed={visibleTransactionFeed} selected={selectedTransaction} busy={Boolean(display.busy)} select={(transactionId) => void selectTransaction(transactionId)} next={() => { if (visibleTransactionFeed.nextCursor) void run('transactions', visibleTransactionFeed.nextCursor) }} />}{mode === 'card' && transactionsLoaded && !hasTransactionResults && visibleTransactionFeed.scope === collectionScope && display.busy !== 'transactions' && transactionFeed.scope === collectionScope && <section className="empty-state card-transaction-empty"><Search /><h3>NO CARD TRANSACTIONS</h3><p>当前筛选条件下没有可显示的公开交易。</p></section>}</>
 }
 
-function OperationsWorkspace({ session, tenantId, onUnauthorized, invalidateSession }: { session: AdminSession; tenantId: string; onUnauthorized: () => void; invalidateSession: (expectedAccessToken: string) => void }) {
-  const [tab, setTab] = useState<'wallet' | 'wallet-transactions' | 'operation' | 'user' | 'trace'>('wallet')
+type OperationsTab = 'wallet' | 'wallet-transactions' | 'digital-assets' | 'account-history' | 'treasury' | 'ledger' | 'operation' | 'user' | 'trace'
+
+function OperationsWorkspace({ session, tenantId, onUnauthorized, invalidateSession, surface = 'operations' }: { session: AdminSession; tenantId: string; onUnauthorized: () => void; invalidateSession: (expectedAccessToken: string) => void; surface?: 'operations' | 'funds' }) {
+  const [tab, setTab] = useState<OperationsTab>(surface === 'funds' ? 'ledger' : 'wallet')
   const [lookup, setLookup] = useState('')
   const [sections, setSections] = useState<DataSection[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [operationDetail, setOperationDetail] = useState<WalletOperationDetailState>(idleWalletOperationDetail)
   const source = session.user.environment as DataSource
-  const requestScope = `${tenantId}\u0000${source}\u0000${tab}`
+  const requestScope = `${tenantId}\u0000${source}\u0000${surface}\u0000${tab}`
   const requestGate = useRef(createRequestGate(requestScope))
   syncRequestScope(requestGate.current, requestScope)
   const run = async () => {
@@ -974,8 +1010,8 @@ function OperationsWorkspace({ session, tenantId, onUnauthorized, invalidateSess
     setSections([])
     setError('')
     setBusy(false)
-  }, [tenantId, tab, source]) // eslint-disable-line react-hooks/exhaustive-deps
-  const switchTab = (next: 'wallet' | 'wallet-transactions' | 'operation' | 'user' | 'trace') => {
+  }, [tenantId, tab, source, surface]) // eslint-disable-line react-hooks/exhaustive-deps
+  const switchTab = (next: OperationsTab) => {
     invalidateRequests(requestGate.current)
     setTab(next)
     setLookup('')
@@ -986,5 +1022,41 @@ function OperationsWorkspace({ session, tenantId, onUnauthorized, invalidateSess
   }
   const placeholder = tab === 'operation' ? '真实 Wallet Operation ID' : '8–128 位 Trace ID'
   const lookupTab = tab === 'operation' || tab === 'trace'
-  return <>{lookupTab && <PageHeading title="终端用户运营" tenant={tenantId} source={source} busy={busy} refresh={() => void run()} />}<div className="workspace-tabs"><button className={tab === 'wallet' ? 'active' : ''} onClick={() => switchTab('wallet')}>Wallet Operations</button><button className={tab === 'wallet-transactions' ? 'active' : ''} onClick={() => switchTab('wallet-transactions')}>Wallet Transactions</button><button className={tab === 'operation' ? 'active' : ''} onClick={() => switchTab('operation')}>Operation Detail</button><button className={tab === 'user' ? 'active' : ''} onClick={() => switchTab('user')}>User / KYC</button><button className={tab === 'trace' ? 'active' : ''} onClick={() => switchTab('trace')}>Trace ID</button></div>{tab === 'wallet' && <WalletOperationsWorkspace session={session} tenantId={tenantId} />}{tab === 'wallet-transactions' && <WalletTransactionsWorkspace session={session} tenantId={tenantId} onUnauthorized={onUnauthorized} />}{lookupTab && <section className="lookup-panel compact"><input value={lookup} onChange={(event) => setLookup(event.target.value)} placeholder={placeholder} /><button disabled={busy} onClick={() => void run()}><ChevronRight />查询</button></section>}{tab === 'user' && <AdminKycPanel session={session} tenantId={tenantId} runtimeEnvironment={runtimeConfig.environment} readKyc={productionApi.adminKyc} invalidateSession={invalidateSession} />}{error && <div className="inline-error page-error"><AlertTriangle />{error}</div>}{operationDetail.status === 'LOADING' && <Loading />}{operationDetail.status === 'NOT_FOUND' && <section className="empty-state"><Search /><h3>WALLET OPERATION NOT FOUND</h3><p>{operationDetail.message}</p></section>}{operationDetail.status === 'CONTRACT_ERROR' && <div className="inline-error page-error"><AlertTriangle />Backend Wallet Operation contract error · {operationDetail.message}</div>}{operationDetail.status === 'ERROR' && <div className="inline-error page-error"><AlertTriangle />{operationDetail.message}</div>}{operationDetail.status === 'SUCCESS' && <><DataCard section={{ title: 'Wallet Operation', description: `${source} · Validated operation identity, status, asset and amount`, value: [operationDetail.value.operation] }} query="" /><DataCard section={{ title: 'Wallet Accounts', description: 'Validated source and destination account summary', value: operationDetail.value.accounts }} query="" /><DataCard section={{ title: 'Journal Summary', description: 'Validated journal and entry counts; raw entries are not rendered', value: operationDetail.value.journals }} query="" /><DataCard section={{ title: 'Treasury Summary', description: 'Validated treasury position for the operation asset', value: operationDetail.value.treasury ? [operationDetail.value.treasury] : [] }} query="" /></>}{tab === 'trace' && (busy && !sections.length ? <Loading /> : sections.map((section) => <DataCard key={section.title} section={section} query="" />))}</>
+  return <>
+    {lookupTab && <PageHeading title="终端用户运营" tenant={tenantId} source={source} busy={busy} refresh={() => void run()} />}
+    <div className="workspace-tabs" data-admin-surface={surface}>
+      <button className={tab === 'wallet' ? 'active' : ''} onClick={() => switchTab('wallet')}>Wallet Operations</button>
+      <button className={tab === 'wallet-transactions' ? 'active' : ''} onClick={() => switchTab('wallet-transactions')}>Wallet Transactions</button>
+      {surface === 'funds' ? <>
+        <button className={tab === 'digital-assets' ? 'active' : ''} onClick={() => switchTab('digital-assets')}>Digital Assets</button>
+        <button className={tab === 'account-history' ? 'active' : ''} onClick={() => switchTab('account-history')}>Account History</button>
+        <button className={tab === 'treasury' ? 'active' : ''} onClick={() => switchTab('treasury')}>Treasury & Reconciliation</button>
+        <button className={tab === 'ledger' ? 'active' : ''} onClick={() => switchTab('ledger')}>Ledger</button>
+      </> : <>
+        <button className={tab === 'operation' ? 'active' : ''} onClick={() => switchTab('operation')}>Operation Detail</button>
+        <button className={tab === 'user' ? 'active' : ''} onClick={() => switchTab('user')}>User / KYC</button>
+        <button className={tab === 'trace' ? 'active' : ''} onClick={() => switchTab('trace')}>Trace ID</button>
+      </>}
+    </div>
+    {tab === 'wallet' && <WalletOperationsWorkspace session={session} tenantId={tenantId} />}
+    {tab === 'wallet-transactions' && <WalletTransactionsWorkspace session={session} tenantId={tenantId} onUnauthorized={onUnauthorized} />}
+    {tab === 'digital-assets' && surface === 'funds' && <DigitalAssetFundsWorkspace session={session} tenantId={tenantId} invalidateSession={invalidateSession} />}
+    {tab === 'account-history' && surface === 'funds' && <WalletAccountHistoryWorkspace session={session} tenantId={tenantId} invalidateSession={invalidateSession} />}
+    {tab === 'treasury' && surface === 'funds' && <TreasuryReconciliationWorkspace session={session} tenantId={tenantId} runtimeEnvironment={runtimeConfig.environment} invalidateSession={invalidateSession} />}
+    {tab === 'ledger' && surface === 'funds' && <LedgerWorkspace session={session} tenantId={tenantId} invalidateSession={invalidateSession} />}
+    {lookupTab && <section className="lookup-panel compact"><input value={lookup} onChange={(event) => setLookup(event.target.value)} placeholder={placeholder} /><button disabled={busy} onClick={() => void run()}><ChevronRight />查询</button></section>}
+    {tab === 'user' && <AdminKycPanel session={session} tenantId={tenantId} runtimeEnvironment={runtimeConfig.environment} readKyc={productionApi.adminKyc} invalidateSession={invalidateSession} />}
+    {error && <div className="inline-error page-error"><AlertTriangle />{error}</div>}
+    {operationDetail.status === 'LOADING' && <Loading />}
+    {operationDetail.status === 'NOT_FOUND' && <section className="empty-state"><Search /><h3>WALLET OPERATION NOT FOUND</h3><p>{operationDetail.message}</p></section>}
+    {operationDetail.status === 'CONTRACT_ERROR' && <div className="inline-error page-error"><AlertTriangle />Backend Wallet Operation contract error · {operationDetail.message}</div>}
+    {operationDetail.status === 'ERROR' && <div className="inline-error page-error"><AlertTriangle />{operationDetail.message}</div>}
+    {operationDetail.status === 'SUCCESS' && <>
+      <DataCard section={{ title: 'Wallet Operation', description: `${source} · Validated operation identity, status, asset and amount`, value: [operationDetail.value.operation] }} query="" />
+      <DataCard section={{ title: 'Wallet Accounts', description: 'Validated source and destination account summary', value: operationDetail.value.accounts }} query="" />
+      <DataCard section={{ title: 'Journal Summary', description: 'Validated journal and entry counts; raw entries are not rendered', value: operationDetail.value.journals }} query="" />
+      <DataCard section={{ title: 'Treasury Summary', description: 'Validated treasury position for the operation asset', value: operationDetail.value.treasury ? [operationDetail.value.treasury] : [] }} query="" />
+    </>}
+    {tab === 'trace' && (busy && !sections.length ? <Loading /> : sections.map((section) => <DataCard key={section.title} section={section} query="" />))}
+  </>
 }

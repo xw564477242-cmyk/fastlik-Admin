@@ -1,3 +1,5 @@
+import {adminReleaseIdentity} from './admin-release-identity.mjs';
+import {restoredAdminReadAllowed} from './admin-restored-read-routing.mjs';
 // .offline-build/fastlik-Admin/src/b17-paused.ts
 function windowResponse(request, env, now = Date.now()) {
   if (env.FASTLINK_PREVIEW_DEPLOYMENT_PROFILE !== "B17_READONLY_MONTH_V1") return null;
@@ -72,7 +74,7 @@ function allowed(target, method, routes) {
   return (route.required ?? []).every((key) => seen.has(key));
 }
 var walletRequestAllowed = (path, method = "GET") => allowed(path, method, wallet);
-var adminRequestAllowed = (path, method = "GET") => allowed(path, method, admin);
+var adminRequestAllowed = (path, method = "GET") => allowed(path, method, admin) || restoredAdminReadAllowed(path, method);
 var serverRequestAllowed = (path, method) => path.startsWith("/api/") && (walletRequestAllowed(path.slice(4), method) || adminRequestAllowed(path.slice(4), method) || method === "GET" && /^\/api\/health(?:\/readiness)?$/.test(path));
 
 // .offline-build/fastlik-Admin/src/launch/preview-readonly-policy.ts
@@ -162,6 +164,7 @@ export default {
         const context = diagnosticContext(request);
         try {
             const binding = await previewAccess(request, env), url = new URL(request.url);
+            Object.assign(binding, adminReleaseIdentity);
             context.stage = 'WINDOW';
             const paused = windowResponse(request, env);
             if (paused)

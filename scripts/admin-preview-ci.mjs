@@ -10,7 +10,7 @@ export const target = Object.freeze({
   ref: 'refs/heads/codex/fl-launch-b17-admin-preview-ci-20261025',
   account: 'af8ac20dee08abe5ec98a892ae83873e',
   worker: 'fastlink-admin-preview-b13',
-  previousVersion: '86af439b-2dfb-4407-b791-89408509e7a9',
+  previousVersion: 'e408d4fa-edaf-4e62-9eb8-5938a4a45229',
 })
 const packageRoot = path.resolve('ci/admin-preview-b17')
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -30,7 +30,7 @@ export async function verifyPayload() {
       config.main !== './frontend/worker.js' || config.assets?.directory !== './frontend/public' ||
       Object.hasOwn(config, 'vars')) throw new Stop('PACKAGE_TARGET_REFUSED')
   const lines = (await readFile(path.join(packageRoot, 'APPROVED-SHA256SUMS'), 'utf8')).trim().split('\n')
-  if (lines.length !== 9) throw new Stop('APPROVED_PACKAGE_SCOPE_REFUSED')
+  if (lines.length !== 12) throw new Stop('APPROVED_PACKAGE_SCOPE_REFUSED')
   for (const line of lines) {
     const match = /^([0-9a-f]{64})  (wrangler\.json|frontend\/[A-Za-z0-9_./-]+)$/.exec(line)
     if (!match || match[2].includes('..')) throw new Stop('PACKAGE_PATH_REFUSED')

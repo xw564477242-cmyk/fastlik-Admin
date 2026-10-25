@@ -1,3 +1,4 @@
+import {restoredAdminReadAllowed} from './admin-restored-read-routing'
 // Product routing only. These predicates grant no database or actor permissions.
 const id = '[A-Za-z0-9_-]{2,128}';
 type Route = { methods: readonly string[]; path: RegExp; query?: readonly string[]; required?: readonly string[] };
@@ -48,7 +49,7 @@ function allowed(target: string, method: string, routes: readonly Route[]): bool
   return (route.required ?? []).every(key => seen.has(key));
 }
 export const walletRequestAllowed = (path: string, method = 'GET') => allowed(path, method, wallet);
-export const adminRequestAllowed = (path: string, method = 'GET') => allowed(path, method, admin);
+export const adminRequestAllowed = (path: string, method = 'GET') => (allowed(path, method, admin) || restoredAdminReadAllowed(path, method));
 export const walletRouteAllowed = (path: string) => ['/', '/auth', '/assets/digital', '/assets/fiat', '/assets/cards', '/history', '/kyc', '/cards'].includes(path);
 export const serverRequestAllowed = (path: string, method: string) => path.startsWith('/api/')
   && (walletRequestAllowed(path.slice(4), method) || adminRequestAllowed(path.slice(4), method)
