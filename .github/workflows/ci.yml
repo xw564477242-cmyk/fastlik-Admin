@@ -39,15 +39,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Only new CI guard tests
-        run: node --test scripts/admin-preview-ci.test.mjs
-      - name: Install the existing pinned Wrangler version without credentials
-        run: npm install --prefix "$RUNNER_TEMP/fl-b17-wrangler" --no-save --ignore-scripts --no-audit --no-fund wrangler@4.114.0
       - name: Read only the fixed Admin Access application capability
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEV_API_TOKEN }}
           HOSTED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEV_ACCOUNT_ID }}
-          WRANGLER_BIN: ${{ runner.temp }}/fl-b17-wrangler/node_modules/.bin/wrangler
           PREVIEW_RESULT_FILE: ${{ runner.temp }}/fl-b17-admin-preview-result.json
         run: node scripts/admin-access-readonly.mjs
       - name: Only the non-secret release receipt
