@@ -15,21 +15,23 @@ function parseUser(v:unknown, tenant:string):User {
 }
 export function B10Users({session,review,invalidateSession}:{session:AdminSession;review:boolean;invalidateSession:(token:string)=>void}) {
   const [users,setUsers]=useState<User[]>([]),[selected,setSelected]=useState<User|null>(null),[reason,setReason]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false)
+  const [listState,setListState]=useState<'loading'|'ready'|'forbidden'|'error'>('loading')
   const base=`/admin/tenants/${encodeURIComponent(session.user.tenantId)}/users`
   const expired=!Number.isFinite(Date.parse(session.expiresAt)) || Date.parse(session.expiresAt)<=Date.now()
   const read=(path:string,method='GET',body?:unknown,signal?:AbortSignal)=>apiRequest<string>(path,session.accessToken,method,body,{format:'bounded-text',maxBytes:32768},signal)
-  function fail(e:unknown){setMessage(e instanceof Error?e.message:'操作不可用');if(e instanceof ApiError && e.status===401)invalidateSession(session.accessToken)}
+  function fail(e:unknown){setMessage(e instanceof ApiError&&e.status===403?`此页面读取被拒绝（HTTP 403）。${e.message}`:e instanceof Error?e.message:'操作不可用');if(e instanceof ApiError && e.status===401)invalidateSession(session.accessToken)}
   useEffect(()=>{
     const controller=new AbortController()
-    if(expired || session.user.environment!=='TEST'){setMessage('会话已过期或环境不可用');return}
+    if(expired || session.user.environment!=='TEST'){setUsers([]);setSelected(null);setListState('error');setMessage('会话已过期或环境不可用');return}
+    setUsers([]);setSelected(null);setListState('loading');setMessage('')
     setBusy(true)
     read(`${base}?environment=TEST`,'GET',undefined,controller.signal).then(raw=>{
       const v=JSON.parse(raw) as {records?:unknown[];truncated?:unknown}
       if(!v || Object.keys(v).sort().join(',')!=='records,truncated' || !Array.isArray(v.records) || v.records.length>25 || typeof v.truncated!=='boolean')throw Error('用户列表响应无效')
       const rows=v.records.map(x=>parseUser(x,session.user.tenantId))
       if(new Set(rows.map(x=>x.userId)).size!==rows.length)throw Error('用户列表重复')
-      if(!controller.signal.aborted){setUsers(rows);setMessage(v.truncated?'仅显示前25条':'已读取当前租户用户')}
-    }).catch(e=>{if(!controller.signal.aborted)fail(e)}).finally(()=>{if(!controller.signal.aborted)setBusy(false)})
+      if(!controller.signal.aborted){setUsers(rows);setListState('ready');setMessage(v.truncated?'仅显示前25条':'已读取当前租户用户')}
+    }).catch(e=>{if(!controller.signal.aborted){setUsers([]);setSelected(null);setListState(e instanceof ApiError&&e.status===403?'forbidden':'error');fail(e)}}).finally(()=>{if(!controller.signal.aborted)setBusy(false)})
     return()=>controller.abort()
   },[base,session.accessToken,session.expiresAt])
   async function detail(userId:string){setBusy(true);setMessage('');try{setSelected(parseUser(JSON.parse(await read(`${base}/${encodeURIComponent(userId)}?environment=TEST`)),session.user.tenantId))}catch(e){setSelected(null);fail(e)}finally{setBusy(false)}}
@@ -42,9 +44,9 @@ export function B10Users({session,review,invalidateSession}:{session:AdminSessio
     }catch(e){fail(e)}finally{setBusy(false)}
   }
   return <section aria-label={review?'KYC审核':'用户管理'}>
-    <h2>{review?(runtimeConfig.previewReadOnly?'KYC 状态（只读）':'KYC 审核'):'用户管理'}</h2><p role="status">{message}</p>
-    {users.length===0&&!busy&&<p>当前租户暂无可见用户。</p>}
-    <table><thead><tr><th>用户</th><th>邮箱</th><th>KYC</th><th>操作</th></tr></thead><tbody>{users.map(u=><tr key={u.userId}><td>{u.firstName} {u.lastName}</td><td>{u.email}</td><td>{u.kycStatus}</td><td><button disabled={busy||expired} onClick={()=>void detail(u.userId)}>查看详情</button></td></tr>)}</tbody></table>
+    <h2>{review?(runtimeConfig.previewReadOnly?'KYC 状态（只读）':'KYC 审核'):'用户管理'}</h2><p role={listState==='forbidden'||listState==='error'?'alert':'status'}>{listState==='loading'?'正在读取当前租户用户…':message}</p>
+    {listState==='ready'&&users.length===0&&!busy&&<p>当前租户暂无可见用户。</p>}
+    {listState==='ready'&&<table><thead><tr><th>用户</th><th>邮箱</th><th>KYC</th><th>操作</th></tr></thead><tbody>{users.map(u=><tr key={u.userId}><td>{u.firstName} {u.lastName}</td><td>{u.email}</td><td>{u.kycStatus}</td><td><button disabled={busy||expired} onClick={()=>void detail(u.userId)}>查看详情</button></td></tr>)}</tbody></table>}
     {selected&&<article><h3>用户详情</h3><dl><dt>用户编号</dt><dd>{selected.userId}</dd><dt>租户</dt><dd>{selected.tenantId}</dd><dt>邮箱</dt><dd>{selected.email}</dd><dt>状态</dt><dd>{selected.isActive?'启用':'停用'}</dd><dt>KYC</dt><dd>{selected.kycStatus}</dd></dl>
       {review&&!runtimeConfig.previewReadOnly&&<fieldset disabled={busy||expired||!session.user.permissions.includes('kyc:review')}><legend>当前租户 KYC 审核</legend>
         <label>审核原因<input aria-label="审核原因" value={reason} minLength={2} maxLength={240} onChange={e=>setReason(e.target.value)}/></label>

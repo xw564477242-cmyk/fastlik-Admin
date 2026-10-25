@@ -8,7 +8,7 @@ type Tab = 'users' | 'kyc' | 'support'
 type Props = { session: AdminSession; onLogout: () => void; invalidateSession: (token: string) => void }
 
 export function B10Workspace({ session, onLogout, invalidateSession }: Props) {
-  const [tab, setTab] = useState<Tab>('users')
+  const [tab, setTab] = useState<Tab>(runtimeConfig.previewReadOnly ? 'support' : 'users')
   const identity = JSON.stringify([session.user.id, session.user.tenantId, session.user.environment,
     session.expiresAt, [...session.user.permissions].sort()])
   return <>
