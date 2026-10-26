@@ -99,4 +99,3 @@ export function ManagementCatalogWorkspace({session,tenantId,mode,onUnauthorized
  <fieldset disabled><legend>管理与资金写入未开放</legend><button>保存配置</button><button>新增记录</button><button>删除记录</button></fieldset>
  </section>
 }
-
