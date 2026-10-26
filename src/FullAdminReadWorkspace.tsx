@@ -50,7 +50,7 @@ export function FullAdminReadWorkspace({session,tenantId,page,onUnauthorized,onS
   useEffect(()=>{const controller=new AbortController(),ticket=++sequence.current;setResult(null);setDetail(null);setError('');detailAbort.current?.abort();if(!allowed){setBusy(false);return}setBusy(true)
     const fetchData=async()=>{
       let data:unknown
-      if(surface==='users')data=await productionApi.users(DEFAULT_API,session.accessToken,tenantId,environment,filters,controller.signal)
+      if(surface==='users')data=await productionApi.adminUsers(DEFAULT_API,session.accessToken,tenantId,environment,filters,controller.signal)
       else if(surface==='merchants')data=await productionApi.merchants(DEFAULT_API,session.accessToken,tenantId,environment,filters,controller.signal)
       else if(surface==='payments')data=await productionApi.merchantPayments(DEFAULT_API,session.accessToken,tenantId,environment,filters,controller.signal)
       else if(surface==='evidence')data=await productionApi.evidence(DEFAULT_API,session.accessToken,tenantId,environment,filters,controller.signal)
@@ -65,7 +65,7 @@ export function FullAdminReadWorkspace({session,tenantId,page,onUnauthorized,onS
   useEffect(()=>()=>{sequence.current++;detailAbort.current?.abort()},[])
   const choose=(next:ReadSurface)=>{setSurface(next);setFilters({limit:25,offset:0});setResult(null);setDetail(null);setError('')}
   const open=async(row:Row,kind:ReadSurface=surface)=>{const id=kind==='users'?row.userId:row.id;if(!allowed||busy||!id)return;detailAbort.current?.abort();const controller=new AbortController();detailAbort.current=controller;setDetail(null);setError('')
-    try{const value=kind==='users'?parseAdminUserRecord(await productionApi.user(DEFAULT_API,session.accessToken,tenantId,environment,String(id),controller.signal),tenantId,environment,String(id)):kind==='clients'?await productionApi.apiClient(DEFAULT_API,session.accessToken,tenantId,String(id),controller.signal):kind==='events'?await productionApi.event(DEFAULT_API,session.accessToken,tenantId,environment,String(id),controller.signal):kind==='merchants'?await productionApi.merchantDetail(DEFAULT_API,session.accessToken,tenantId,environment,String(id),controller.signal):kind==='payments'?await productionApi.merchantPaymentDetail(DEFAULT_API,session.accessToken,tenantId,environment,String(id),controller.signal):row
+    try{const value=kind==='users'?parseAdminUserRecord(await productionApi.adminUserDirectoryDetail(DEFAULT_API,session.accessToken,tenantId,environment,String(id),controller.signal),tenantId,environment,String(id)):kind==='clients'?await productionApi.apiClient(DEFAULT_API,session.accessToken,tenantId,String(id),controller.signal):kind==='events'?await productionApi.event(DEFAULT_API,session.accessToken,tenantId,environment,String(id),controller.signal):kind==='merchants'?await productionApi.merchantDetail(DEFAULT_API,session.accessToken,tenantId,environment,String(id),controller.signal):kind==='payments'?await productionApi.merchantPaymentDetail(DEFAULT_API,session.accessToken,tenantId,environment,String(id),controller.signal):row
       if(controller.signal.aborted||current.current!==scope||detailAbort.current!==controller||Date.parse(session.expiresAt)<=Date.now())return
       if(!record(value))throw new Error('详情合同不匹配');setDetail({scope,value,kind})
     }catch(e){if(!controller.signal.aborted&&current.current===scope)fail(e)}

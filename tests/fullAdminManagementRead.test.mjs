@@ -22,7 +22,7 @@ const text=r=>JSON.stringify(r.toJSON())
 const user=i=>({userId:'user_'+i,tenantId:'tenant_A',environment:'TEST',kycStatus:'APPROVED',createdAt:'2026-10-17T00:00:00Z'})
 
 test('user management task: server page → fresh detail → exact KYC association; no PII or write permission',async()=>{
- const calls=[],selected=[];const api={users:async(_b,_t,tenant,env,q)=>{calls.push({kind:'list',tenant,env,...q});return {data:Array.from({length:q.offset===0?25:1},(_,i)=>user(q.offset+i)),total:26,limit:q.limit,offset:q.offset}},user:async(_b,_t,tenant,env,id)=>{calls.push({kind:'detail',tenant,env,id});return user(25)}}
+ const calls=[],selected=[];const api={adminUsers:async(_b,_t,tenant,env,q)=>{calls.push({kind:'list',tenant,env,...q});return {data:Array.from({length:q.offset===0?25:1},(_,i)=>user(q.offset+i)),total:26,limit:q.limit,offset:q.offset}},adminUserDirectoryDetail:async(_b,_t,tenant,env,id)=>{calls.push({kind:'detail',tenant,env,id});return user(25)}}
  const {FullAdminReadWorkspace,parseAdminUserRecord}=load('FullAdminReadWorkspace.tsx',api);let r
  await act(async()=>{r=create(React.createElement(FullAdminReadWorkspace,{...props,page:'users',onSelectUser:id=>selected.push(id)}))})
  assert.equal(calls[0].offset,0);await act(async()=>btn(r,'下一页').props.onClick());assert.equal(calls[1].offset,25)
@@ -47,7 +47,7 @@ test('events task uses backend total beyond 200, next page, fresh detail and Tra
 })
 
 test('filter/token scope drops stale detail and late old response; wrong tenant receives no request',async()=>{
- let resolveOld;const calls=[];const api={users:async(_b,token,_tenant,_env,q)=>{calls.push(token);return token==='OLD_MOCK_TOKEN'?new Promise(resolve=>resolveOld=resolve):{data:[],total:0,limit:q.limit,offset:q.offset}}}
+ let resolveOld;const calls=[];const api={adminUsers:async(_b,token,_tenant,_env,q)=>{calls.push(token);return token==='OLD_MOCK_TOKEN'?new Promise(resolve=>resolveOld=resolve):{data:[],total:0,limit:q.limit,offset:q.offset}}}
  const {FullAdminReadWorkspace}=load('FullAdminReadWorkspace.tsx',api);let r
  await act(async()=>{r=create(React.createElement(FullAdminReadWorkspace,{...props,page:'users',session:{...session,accessToken:'OLD_MOCK_TOKEN'}}))})
  await act(async()=>r.update(React.createElement(FullAdminReadWorkspace,{...props,page:'users'})))
