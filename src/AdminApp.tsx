@@ -652,7 +652,7 @@ function Permissions({ session }: { session: AdminSession }) {
     ...session.user.roles.map((role) => ({ type: 'ROLE', value: role, source: 'GET /admin/auth/me' })),
     ...session.user.permissions.map((permission) => ({ type: 'PERMISSION', value: permission, source: 'GET /admin/auth/me' })),
   ]
-  return <><PageHeading title="Role Management" tenant={session.user.tenantId} source={session.user.environment} busy={false} refresh={() => undefined} /><section className="unavailable partial"><ShieldCheck /><div><h3>当前 Session 权限已真实接通</h3><p>当前已接通的是服务端 Session 中的角色与权限。历史源码存在 Role / Permission / TenantUserRole / RolePermission；其租户目录、成员和权限关联尚未取得本轮实际读取及界面验收，不能以当前 Session 代替全目录。</p></div></section><DataCard section={{ title: 'Authenticated RBAC', description: 'No local role seed or fake permission matrix', value: rows }} query="" /></>
+  return <><PageHeading title="Role Management" tenant={session.user.tenantId} source={session.user.environment} busy={false} refresh={() => undefined} /><section className="unavailable partial"><ShieldCheck /><div><h3>当前 Session 权限已真实接通 · Backend Contract Missing：完整角色目录</h3><p>当前已接通的是服务端 Session 中的角色与权限。历史源码存在 Role / Permission / TenantUserRole / RolePermission；其租户目录、成员和权限关联尚未取得本轮实际读取及界面验收，不能以当前 Session 代替全目录。</p></div></section><DataCard section={{ title: 'Authenticated RBAC', description: 'No local role seed or fake permission matrix', value: rows }} query="" /></>
 }
 
 function CardWorkspace({ session, tenantId, mode, invalidateSession }: { session: AdminSession; tenantId: string; mode: 'card' | 'history'; invalidateSession: (expectedAccessToken: string) => void }) {
