@@ -10,7 +10,7 @@ export const target = Object.freeze({
   ref: 'refs/heads/codex/fl-launch-b17-admin-preview-ci-20261025',
   account: 'af8ac20dee08abe5ec98a892ae83873e',
   worker: 'fastlink-admin-preview-b13',
-  previousVersion: 'd7aad90e-8185-40be-9f31-461f154ea6d4',
+  previousVersion: 'e4f82e24-5121-454d-a8f1-79b9e2eba088',
 })
 const packageRoot = path.resolve('ci/admin-preview-b17')
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i

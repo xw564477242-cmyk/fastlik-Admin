@@ -12,7 +12,7 @@ test('authenticated Operations route exposes one wallet transaction tab without 
   assert.equal(occurrences(app, '<WalletTransactionsWorkspace session={session} tenantId={tenantId} onUnauthorized={onUnauthorized} />'), 1)
   assert.match(app, /active === 'operations' && <OperationsWorkspace session=\{session\} tenantId=\{tenantId\} onUnauthorized=\{onLogout\} invalidateSession=\{invalidateSession\} \/>/)
   assert.match(app, /onClick=\{\(\) => switchTab\('wallet-transactions'\)\}>Wallet Transactions<\/button>/)
-  assert.match(app, /const \[tab, setTab\] = useState<[^>]*>\('wallet'\)/)
+  assert.match(app, /const \[tab, setTab\] = useState<[^>]*>\(surface === 'funds' \? 'ledger' : 'wallet'\)/)
   assert.match(app, /const lookupTab = tab === 'operation' \|\| tab === 'trace'/)
   assert.match(app, /tab === 'user' && <AdminKycPanel/)
 })

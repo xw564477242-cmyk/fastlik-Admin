@@ -98,7 +98,7 @@ export async function apiRequest<T>(path:string,token?:string,method='GET',body?
  else externalSignal?.addEventListener('abort',abortFromCaller,{once:true})
  try{
   const response=await fetch(`${DEFAULT_API}${path}`,{
-   mode:'cors',credentials:'same-origin',cache:'no-store',signal:controller.signal,method,
+   mode:'cors',...(runtimeConfig.previewReadOnly && DEFAULT_API==='/api' ? {credentials:'same-origin' as const} : {credentials:'omit' as const}),cache:'no-store',signal:controller.signal,method,
    headers:{Accept:'application/json','X-Trace-Id':trace,...(body?{'Content-Type':'application/json'}:{}),...(token?{Authorization:`Bearer ${token}`}:{})},
    ...(body?{body:JSON.stringify(body)}:{})
   })
