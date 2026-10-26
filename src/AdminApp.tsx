@@ -1,3 +1,4 @@
+import { FullAdminReadWorkspace } from './FullAdminReadWorkspace'
 import { WalletAccountHistoryWorkspace } from './WalletAccountHistoryWorkspace'
 import { DigitalAssetFundsWorkspace } from './DigitalAssetFundsWorkspace'
 import { LedgerWorkspace } from './LedgerWorkspace'
@@ -155,16 +156,7 @@ const nav: NavItem[] = [
   { id: 'system', label: '系统设置与审计', icon: Settings },
 ]
 
-const unavailable: Partial<Record<NavId, { title: string; detail: string }>> = {
-  whitelabel: {
-    title: 'Unavailable · Backend Contract Missing',
-    detail: '原白标 / OEM / ODM 页面设计已保留，但 Railway Backend 当前没有白标项目、品牌配置或交付任务的正式读取接口。',
-  },
-  revenue: {
-    title: 'Unavailable · Backend Contract Missing',
-    detail: 'Railway Backend 当前没有费率模板、账单或收入分成的正式读取接口；本页不会显示历史演示收入。',
-  },
-}
+const unavailable: Partial<Record<NavId, { title: string; detail: string }>> = {}
 
 const capabilityRows: JsonRecord[] = [
   { module: '租户与组织中心', source: 'GET /admin/tenants', state: 'SOURCE_MAPPED' },
@@ -174,8 +166,8 @@ const capabilityRows: JsonRecord[] = [
   { module: '风险与合规', source: 'GET /dashboards/risk', state: 'SOURCE_MAPPED' },
   { module: '商户支付', source: 'GET /merchants + /merchant/payments', state: 'SOURCE_MAPPED' },
   { module: '开放平台', source: 'GET /api-clients + /events', state: 'SOURCE_MAPPED' },
-  { module: '白标交付', source: 'No formal read endpoint', state: 'UNAVAILABLE' },
-  { module: '计费与分成', source: 'No formal read endpoint', state: 'UNAVAILABLE' },
+  { module: '白标交付', source: 'Tenant branding fields; OEM delivery contract not yet established', state: 'PARTIAL_SOURCE_MAPPED' },
+  { module: '计费与分成', source: 'GET card-products + fee-policy; invoices/revenue sharing NOT_VERIFIED', state: 'PARTIAL_SOURCE_MAPPED' },
   { module: '角色管理', source: 'Session roles/permissions only', state: 'PARTIAL' },
 ]
 
@@ -339,8 +331,7 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
   const token = session.accessToken
   const selectedTenant = tenants.find((item) => item.id === tenantId)
   const current = nav.find((item) => item.id === active) ?? nav[0]
-  const previewUnconnected = runtimeConfig.previewReadOnly && !unavailable[active]
-    && !['tenants', 'cardcenter', 'cardhistory', 'operations', 'funds', 'permissions', 'subsystems'].includes(active)
+
 
   useEffect(() => {
     let cancelled = false
@@ -367,7 +358,7 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
   }, [session.user.tenantId, token])
 
   const load = useCallback(async () => {
-    if (previewUnconnected || !tenantId || unavailable[active] || ['programs', 'cardcenter', 'cardhistory', 'operations', 'permissions', 'subsystems', 'funds'].includes(active)) {
+    if (!tenantId || unavailable[active] || ['programs', 'cardcenter', 'cardhistory', 'operations', 'permissions', 'subsystems', 'funds', 'merchanttesting', 'api', 'sandbox', 'revenue', 'whitelabel'].includes(active)) {
       setSections([])
       setError('')
       return
@@ -380,7 +371,7 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
       if (active === 'overview') {
         next = await Promise.all([
           settledSection('Backend Readiness', 'Railway live readiness and release SHA', productionApi.systemReadiness(DEFAULT_API)),
-          settledSection('Integration Readiness', 'External-provider release gates', productionApi.readiness(DEFAULT_API, token, tenantId)),
+          settledSection('Integration Readiness', '服务级配置存在性与冻结状态；不代表当前租户接线或 Provider 实测', productionApi.readiness(DEFAULT_API, token, tenantId)),
           settledSection('Treasury Positions', 'Live financial positions', productionApi.treasury(DEFAULT_API, token, tenantId, source)),
           settledSection('Data Contamination', 'Legacy Demo / Mock contamination audit', productionApi.contamination(DEFAULT_API, token, tenantId, source)),
         ])
@@ -427,7 +418,7 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
     } finally {
       setBusy(false)
     }
-  }, [active, source, tenantId, tenants, token, previewUnconnected])
+  }, [active, source, tenantId, tenants, token])
 
   useEffect(() => { void load() }, [load])
 
@@ -470,25 +461,28 @@ function AuthenticatedAdmin({ session, onLogout, invalidateSession }: { session:
           {tenantError && <div role="alert" className="inline-error page-error" data-tenant-read-error><Unplug />{tenantError}</div>}
           {error && <div className="inline-error page-error"><Unplug />{error}</div>}
           {runtimeConfig.previewReadOnly && <p>完整 Admin 页面已保留；仅显示当前租户已接线的只读结果，菜单可见不代表接口已验收或已获权限。</p>}
-          {previewUnconnected ? <section role="status" className="unavailable"><h2>{current.label}</h2><p>此模块的历史 UI 和 API 映射仍在；当前预览只读链路尚未接通，未发起业务请求，未展示空数据或替代数据。</p></section> : <>
+          <>
           {unavailable[active] ? <Unavailable {...unavailable[active]!} /> : null}
           {active === 'subsystems' && <DataCard section={{ title: 'FastLink 子系统能力地图', description: '静态源码 API 映射；不代表当前预览可达性或运行验收。', value: capabilityRows }} query={query} />}
           {active === 'tenants' && <TenantWorkspace session={session} tenants={tenants} selectedTenantId={tenantId} invalidateSession={invalidateSession} onCreated={(tenant) => { setTenants((current) => [tenant, ...current.filter((item) => item.id !== tenant.id)]); setTenantId(tenant.id) }} />}
           {active === 'permissions' && <Permissions session={session} />}
-          {!runtimeConfig.previewReadOnly && active === 'programs' && <CardConfigurationPanel session={session} tenantId={tenantId} onCardCreated={() => undefined} />}
+          {(active === 'merchanttesting' || active === 'api' || active === 'sandbox') && <FullAdminReadWorkspace key={active} session={session} tenantId={tenantId} page={active} onUnauthorized={onLogout} />}
+          {active === 'whitelabel' && <section className="panel"><h2>品牌与白标</h2><p>以下基础品牌字段来自当前租户读取合同；OEM / ODM 项目、品牌素材、域名绑定及交付任务仍待实际合同与原件核实。</p>{selectedTenant ? <dl className="treasury-summary-grid"><div><dt>租户 ID</dt><dd>{selectedTenant.id}</dd></div><div><dt>品牌名称</dt><dd>{selectedTenant.brandName}</dd></div><div><dt>法定名称</dt><dd>{selectedTenant.legalName}</dd></div><div><dt>Slug</dt><dd>{selectedTenant.slug}</dd></div><div><dt>环境</dt><dd>{selectedTenant.environment}</dd></div></dl> : <p>尚未取得当前租户结果；不使用演示品牌。</p>}<fieldset disabled><legend>品牌与交付配置 · 未开放写入</legend><label>品牌素材<input placeholder="当前读取合同尚未提供" /></label><label>域名<input placeholder="当前读取合同尚未提供" /></label><button type="button">保存品牌</button><button type="button">创建交付任务</button></fieldset></section>}
+          {active === 'revenue' && <section><section className="panel"><h2>费率、计费与分成</h2><p>读取既有产品模板与租户费率策略。账单、已实现收入和分成流水尚无已核验合同，不以费率配置代替收入或账单。</p></section><CardConfigurationPanel session={session} tenantId={tenantId} onCardCreated={() => undefined} /></section>}
+          {active === 'programs' && <CardConfigurationPanel session={session} tenantId={tenantId} onCardCreated={() => undefined} />}
           {!runtimeConfig.previewReadOnly && active === 'cardcenter' && <CardConfigurationPanel session={session} tenantId={tenantId} onCardCreated={() => undefined} />}
           {active === 'cardcenter' && <CardWorkspace session={session} tenantId={tenantId} mode="card" invalidateSession={invalidateSession} />}
           {active === 'cardhistory' && <CardWorkspace session={session} tenantId={tenantId} mode="history" invalidateSession={invalidateSession} />}
           {active === 'operations' && <OperationsWorkspace session={session} tenantId={tenantId} onUnauthorized={onLogout} invalidateSession={invalidateSession} />}
           {active === 'funds' && <OperationsWorkspace session={session} tenantId={tenantId} onUnauthorized={onLogout} invalidateSession={invalidateSession} surface="funds" />}
-          {!unavailable[active] && !['tenants', 'subsystems', 'permissions', 'programs', 'cardcenter', 'cardhistory', 'operations', 'funds'].includes(active) && (
+          {!unavailable[active] && !['tenants', 'subsystems', 'permissions', 'programs', 'cardcenter', 'cardhistory', 'operations', 'funds', 'merchanttesting', 'api', 'sandbox', 'revenue', 'whitelabel'].includes(active) && (
             <>
               <PageHeading title={current.label} tenant={selectedTenant?.brandName || tenantId} source={source} busy={busy} refresh={() => void load()} />
               {busy && !sections.length ? <Loading /> : sections.map((section) => <DataCard key={section.title} section={section} query={query} />)}
               {!busy && !sections.length && <Empty />}
             </>
           )}
-          </>}
+          </>
         </div>
       </main>
     </div>
@@ -546,7 +540,7 @@ function TenantWorkspace({ session, tenants, selectedTenantId, invalidateSession
   }, [mountedScope])
   return <>
     <PageHeading title="租户与合作方" tenant={selectedTenantId} source={environment ?? session.user.environment} busy={busy} refresh={() => void open(selectedTenantId)} disabled={!selectedTenantId || !environment} description="点击租户条目读取当前管理员环境中的精确详情合同；切换请求时不保留旧详情。" />
-    {!runtimeConfig.previewReadOnly && <TenantCreatePanel session={session} onCreated={onCreated} />}
+    {<TenantCreatePanel session={session} onCreated={onCreated} />}
     <article className="panel data-panel"><div className="panel-title"><div><h3>Tenant Directory</h3><p>GET /admin/tenants · 仅当前 Admin 环境</p></div><span className="record-count">{runtimeConfig.previewReadOnly && !tenants.length ? 'NOT VERIFIED' : `${tenants.length} RECORDS`}</span></div>
       {runtimeConfig.previewReadOnly && !tenants.length ? <p role="status">尚未取得当前租户详情，不能将未验证结果视为空目录。</p> : <div className="table-wrap"><table><thead><tr><th>品牌</th><th>法定名称</th><th>Slug</th><th>状态</th><th>环境</th><th>操作</th></tr></thead><tbody>{tenants.map((tenant) => <tr key={tenant.id}><td>{tenant.brandName}</td><td>{tenant.legalName}</td><td>{tenant.slug}</td><td>{tenant.status}</td><td>{tenant.environment}</td><td><button className="primary-btn" disabled={busy} onClick={() => void open(tenant.id)}>查看详情</button></td></tr>)}</tbody></table></div>}
     </article>
@@ -658,7 +652,7 @@ function Permissions({ session }: { session: AdminSession }) {
     ...session.user.roles.map((role) => ({ type: 'ROLE', value: role, source: 'GET /admin/auth/me' })),
     ...session.user.permissions.map((permission) => ({ type: 'PERMISSION', value: permission, source: 'GET /admin/auth/me' })),
   ]
-  return <><PageHeading title="Role Management" tenant={session.user.tenantId} source={session.user.environment} busy={false} refresh={() => undefined} /><section className="unavailable partial"><ShieldCheck /><div><h3>当前 Session 权限已真实接通</h3><p>Railway Backend 暂无角色目录、成员列表和权限矩阵的管理接口，因此只展示当前服务端 Session 返回的真实角色与权限。</p></div></section><DataCard section={{ title: 'Authenticated RBAC', description: 'No local role seed or fake permission matrix', value: rows }} query="" /></>
+  return <><PageHeading title="Role Management" tenant={session.user.tenantId} source={session.user.environment} busy={false} refresh={() => undefined} /><section className="unavailable partial"><ShieldCheck /><div><h3>当前 Session 权限已真实接通</h3><p>当前已接通的是服务端 Session 中的角色与权限。历史源码存在 Role / Permission / TenantUserRole / RolePermission；其租户目录、成员和权限关联尚未取得本轮实际读取及界面验收，不能以当前 Session 代替全目录。</p></div></section><DataCard section={{ title: 'Authenticated RBAC', description: 'No local role seed or fake permission matrix', value: rows }} query="" /></>
 }
 
 function CardWorkspace({ session, tenantId, mode, invalidateSession }: { session: AdminSession; tenantId: string; mode: 'card' | 'history'; invalidateSession: (expectedAccessToken: string) => void }) {
