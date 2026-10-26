@@ -4,6 +4,12 @@ const objectId = '[A-Za-z0-9_-]{2,128}';
 const traceId = '[A-Za-z0-9._:-]{8,128}';
 const reads = [
     { path: new RegExp('^' + tenant + '$'), keys: [] },
+    { path: new RegExp('^' + tenant + '/management/(branding|capabilities)$'), keys: ['environment'], environment: true },
+    { path: new RegExp('^' + tenant + '/management/(products|roles)$'), keys: ['environment', 'limit', 'offset', 'search'], environment: true },
+    { path: new RegExp('^' + tenant + '/management/(products|roles)/' + objectId + '$'), keys: ['environment'], environment: true },
+    { path: new RegExp('^' + tenant + '/management/roles/' + objectId + '/(members|permissions)$'), keys: ['environment', 'limit', 'offset', 'search'], environment: true },
+    { path: new RegExp('^' + tenant + '/management/audit$'), keys: ['environment', 'limit', 'offset', 'resource', 'action', 'requestId'], environment: true },
+    { path: new RegExp('^' + tenant + '/management/audit/' + objectId + '$'), keys: ['environment'], environment: true },
     { path: new RegExp('^' + tenant + '/ledger/(accounts|journals|trial-balance)$'), keys: ['environment'], environment: true },
     { path: new RegExp('^' + tenant + '/settlement/(liquidity|reconciliation|trial-balance|daily-closing)$'), keys: ['environment'], environment: true },
     { path: new RegExp('^' + tenant + '/wallet/transactions$'), keys: ['environment', 'type', 'status', 'assetCode', 'limit', 'offset'], environment: true },
@@ -24,6 +30,7 @@ const reads = [
     { path: new RegExp('^' + tenant + '/merchant/payments/' + objectId + '$'), keys: ['environment'], environment: true },
     { path: new RegExp('^' + tenant + '/evidence$'), keys: ['environment', 'limit', 'offset', 'category', 'result', 'operation', 'traceId'], environment: true },
     { path: new RegExp('^' + tenant + '/evidence/summary$'), keys: ['environment'], environment: true },
+    { path: new RegExp('^' + tenant + '/evidence/' + objectId + '$'), keys: ['environment'], environment: true },
     { path: new RegExp('^' + tenant + '/operations/mock-contamination$'), keys: ['environment'], environment: true },
     { path: new RegExp('^' + tenant + '/support-cases$'), keys: ['traceId'] },
     { path: new RegExp('^' + tenant + '/support-cases/' + objectId + '$'), keys: [] },
@@ -38,7 +45,7 @@ const reads = [
     { path: new RegExp('^' + tenant + '/treasury/funds-instructions/' + objectId + '$'), keys: ['environment'], environment: true },
 ];
 export function restoredAdminReadAllowed(target, method = 'GET') {
-    if (method !== 'GET' || typeof target !== 'string' || target.length > 4096 || !/^[\x21-\x7e]+$/.test(target))
+    if (method !== 'GET' || typeof target !== 'string' || target.length > 4096 || [...target].some(c => c.charCodeAt(0) < 33 || c.charCodeAt(0) > 126))
         return false;
     const [path, query, extra] = target.split('?');
     if (extra !== undefined || /[%\\;#]/.test(path) || path.includes('//') || /\/(?:\.|\.\.)(?:\/|$)/.test(path))
@@ -64,6 +71,8 @@ export function restoredAdminReadAllowed(target, method = 'GET') {
         if (key === 'kycStatus' && !['PENDING', 'APPROVED', 'REJECTED'].includes(value))
             return false;
         if ((key === 'customerId' || key === 'merchantId') && !/^[A-Za-z0-9_-]{2,100}$/.test(value))
+            return false;
+        if (['resource', 'action', 'requestId'].includes(key) && (value.length > 100 || [...value].some(c => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)))
             return false;
         if (key === 'search' && (value.length > 100 || [...value].some(c => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)))
             return false;

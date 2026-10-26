@@ -146,10 +146,14 @@ async function health(path:string):Promise<Health>{
  }
 }
 
-export type AdminReadQuery = {limit?:number;offset?:number;status?:string;search?:string;merchantId?:string;assetCode?:string;from?:string;to?:string;category?:string;result?:string;operation?:string;traceId?:string;kycStatus?:string}
+export type AdminReadQuery = {limit?:number;offset?:number;status?:string;search?:string;merchantId?:string;assetCode?:string;from?:string;to?:string;category?:string;result?:string;operation?:string;traceId?:string;kycStatus?:string;resource?:string;action?:string;requestId?:string}
 const readQuery=(environment:DataSource,filters:AdminReadQuery={})=>new URLSearchParams(Object.entries({environment,limit:25,offset:0,...filters}).filter(([,v])=>v!==undefined&&v!=='').map(([k,v])=>[k,String(v)])).toString()
 const query=(environment:DataSource)=>`environment=${encodeURIComponent(environment)}`
 export const productionApi={
+ managementRoleRelated:(_base:string,token:string,tenantId:string,environment:DataSource,roleId:string,kind:'members'|'permissions',filters:AdminReadQuery={},signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/management/roles/${encodeURIComponent(roleId)}/${kind}?${readQuery(environment,filters)}`,token,'GET',undefined,jsonResponsePolicy,signal),
+ evidenceDetail:(_base:string,token:string,tenantId:string,environment:DataSource,id:string,signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/evidence/${encodeURIComponent(id)}?${query(environment)}`,token,'GET',undefined,jsonResponsePolicy,signal),
+ managementRead:(_base:string,token:string,tenantId:string,environment:DataSource,kind:'branding'|'products'|'audit'|'capabilities'|'roles',filters:AdminReadQuery={},signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/management/${kind}?${kind==='products'||kind==='audit'||kind==='roles'?readQuery(environment,filters):query(environment)}`,token,'GET',undefined,jsonResponsePolicy,signal),
+ managementDetail:(_base:string,token:string,tenantId:string,environment:DataSource,kind:'products'|'audit'|'roles',id:string,signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/management/${kind}/${encodeURIComponent(id)}?${query(environment)}`,token,'GET',undefined,jsonResponsePolicy,signal),
  supportCases:(_base:string,token:string,tenantId:string,traceId:string,signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/support-cases?traceId=${encodeURIComponent(traceId)}`,token,'GET',undefined,jsonResponsePolicy,signal),
  supportCase:(_base:string,token:string,tenantId:string,id:string,signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/support-cases/${encodeURIComponent(id)}`,token,'GET',undefined,jsonResponsePolicy,signal),
  createSupportCase:(_base:string,token:string,tenantId:string,body:{traceId:string;reason:string},signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/support-cases`,token,'POST',body,jsonResponsePolicy,signal),

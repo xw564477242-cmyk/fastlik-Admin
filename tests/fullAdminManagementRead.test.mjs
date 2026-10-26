@@ -85,3 +85,66 @@ test('support positive record detail is fetched again and validated against exac
  await act(async()=>r.root.findByType('input').props.onChange({target:{value:'trace-positive-A'}}));await act(async()=>btn(r,'查询客服工单').props.onClick());await act(async()=>btn(r,'重新读取工单详情').props.onClick());assert.deepEqual(calls,[{tenant:'tenant_A',id:'case_A'}]);assert(text(r).includes('STATUS_QUESTION'));assert.equal(btn(r,'接手处置').props.disabled,true)
  await act(async()=>r.unmount())
 })
+
+
+test('catalog product task pages on server, re-reads detail and rejects cross-tenant or hidden columns',async()=>{
+ const tenant='b9_tenant_A_20261016',catalogProps={...props,tenantId:tenant,session:{...session,user:{...session.user,tenantId:tenant}}};
+ const row=i=>({id:'product_'+i,tenantId:tenant,environment:'TEST',code:'CODE_'+i,name:'Synthetic product '+i,cardType:'VIRTUAL',currency:'USD',active:false,cardIssueFee:'0.10'}),calls=[];
+ const api={managementRead:async(_b,_t,_tenant,_env,mode,q)=>{calls.push({kind:'list',mode,...q});return {data:[row(q.offset)],total:11,limit:q.limit,offset:q.offset}},managementDetail:async(_b,_t,_tenant,_env,mode,id)=>{calls.push({kind:'detail',mode,id});return row(10)}};
+ const {ManagementCatalogWorkspace,parseCatalogRow}=load('ManagementCatalogWorkspace.tsx',api);let r;
+ await act(async()=>{r=create(React.createElement(ManagementCatalogWorkspace,{...catalogProps,mode:'products'}))});
+ await act(async()=>btn(r,'下一页').props.onClick());assert.equal(calls[1].offset,10);
+ await act(async()=>btn(r,'查看').props.onClick());assert.equal(calls[2].id,'product_10');assert(text(r).includes('0.10'));
+ assert.throws(()=>parseCatalogRow({...row(1),tenantId:'tenant_B'},'products',tenant,'TEST'));assert.throws(()=>parseCatalogRow({...row(1),providerConfig:{}},'products',tenant,'TEST'));
+ await act(async()=>r.unmount());
+});
+
+test('independent audit task reads existing non-auth rows, fresh detail and Trace without metadata',async()=>{
+ const tenant='b9_tenant_A_20261016',catalogProps={...props,tenantId:tenant,session:{...session,user:{...session.user,tenantId:tenant}}},traces=[],calls=[];
+ const row={id:'audit_existing',tenantId:tenant,environment:'TEST',actorType:'ADMIN',action:'CARD_READ',resource:'Card',resourceId:'card_A',requestId:'trace-audit-0001',createdAt:'2026-10-17T00:00:00Z'};
+ const api={managementRead:async(_b,_t,_tenant,_env,mode,q)=>({data:[row],total:1,limit:q.limit,offset:q.offset}),managementDetail:async(_b,_t,_tenant,_env,mode,id)=>{calls.push(id);return row}};
+ const {ManagementCatalogWorkspace,parseCatalogRow}=load('ManagementCatalogWorkspace.tsx',api);let r;
+ await act(async()=>{r=create(React.createElement(ManagementCatalogWorkspace,{...catalogProps,mode:'audit',onSelectTrace:id=>traces.push(id)}))});
+ await act(async()=>btn(r,'查看').props.onClick());assert.deepEqual(calls,['audit_existing']);await act(async()=>btn(r,'查询关联 Trace').props.onClick());assert.deepEqual(traces,['trace-audit-0001']);
+ for(const bad of [{...row,action:'ADMIN_LOGIN'},{...row,resource:'AdminSession'},{...row,metadata:{secret:'MOCK_ONLY'}},{...row,actorId:'private_actor'}])assert.throws(()=>parseCatalogRow(bad,'audit',tenant,'TEST'));
+ assert.equal(r.root.findByType('fieldset').props.disabled,true);await act(async()=>r.unmount());
+});
+
+test('branding distinguishes missing model fields from an empty configuration and never renders raw hidden data',async()=>{
+ const tenant='b9_tenant_A_20261016',catalogProps={...props,tenantId:tenant,session:{...session,user:{...session.user,tenantId:tenant}}};
+ const api={managementRead:async()=>({tenantId:tenant,environment:'TEST',branding:{id:tenant,environment:'TEST',brandName:'Synthetic brand'},unavailableFields:['logoUrl','customDomain']})};
+ const {ManagementCatalogWorkspace}=load('ManagementCatalogWorkspace.tsx',api);let r;await act(async()=>{r=create(React.createElement(ManagementCatalogWorkspace,{...catalogProps,mode:'branding'}))});
+ assert(text(r).includes('Synthetic brand'));assert(text(r).includes('不是已读取的空配置'));assert.equal(r.root.findByType('fieldset').props.disabled,true);await act(async()=>r.unmount());
+});
+
+test('subsystem map opens exact known modules but does not claim runtime health or request Provider data',async()=>{
+ const tenant='b9_tenant_A_20261016',catalogProps={...props,tenantId:tenant,session:{...session,user:{...session.user,tenantId:tenant}}},opened=[];
+ const api={managementRead:async()=>({tenantId:tenant,environment:'TEST',kind:'SOURCE_CONTRACT_MAP',runtimeHealthVerified:false,data:[{module:'产品',page:'programs',contract:'management/products',basis:'Current columns',scope:'READ_CONTRACT_AVAILABLE'}]})};
+ const {ManagementCatalogWorkspace}=load('ManagementCatalogWorkspace.tsx',api);let r;await act(async()=>{r=create(React.createElement(ManagementCatalogWorkspace,{...catalogProps,mode:'capabilities',onNavigate:p=>opened.push(p)}))});
+ await act(async()=>btn(r,'打开模块').props.onClick());assert.deepEqual(opened,['programs']);assert(text(r).includes('不进行外部探测'));await act(async()=>r.unmount());
+});
+
+test('evidence task fetches independent public detail rather than treating the list row as fresh detail',async()=>{
+ const calls=[],row={id:'evidence_existing',tenantId:'tenant_A',environment:'TEST',category:'REGRESSION',operation:'OFFLINE_MOCK_ONLY',result:'BLOCKED',contentHash:'a'.repeat(64),traceId:'trace-evidence-01'};
+ const api={evidence:async(_b,_t,_tenant,_env,q)=>({data:[row],total:1,limit:q.limit,offset:q.offset}),evidenceDetail:async(_b,_t,tenant,environment,id)=>{calls.push({tenant,environment,id});return {...row,blocker:'Runtime not verified'}}};
+ const {FullAdminReadWorkspace}=load('FullAdminReadWorkspace.tsx',api);let r;await act(async()=>{r=create(React.createElement(FullAdminReadWorkspace,{...props,page:'sandbox'}))});
+ await act(async()=>btn(r,'查看').props.onClick());assert.deepEqual(calls,[{tenant:'tenant_A',environment:'TEST',id:'evidence_existing'}]);assert(text(r).includes('Runtime not verified'));assert(!text(r).includes('未调用独立详情接口'));await act(async()=>r.unmount());
+});
+
+test('persisted role task pages roles, re-reads detail and follows separate scoped member/permission pages',async()=>{
+ const tenant='b9_tenant_A_20261016',catalogProps={...props,tenantId:tenant,session:{...session,user:{...session.user,tenantId:tenant}}},calls=[];
+ const role={id:'role_A',code:'READ_ONLY',tenantId:tenant,environment:'TEST'};
+ const api={managementRead:async(_b,_t,_tenant,_env,kind,q)=>({data:[role],total:1,limit:q.limit,offset:q.offset}),managementDetail:async(_b,_t,_tenant,_env,kind,id)=>{calls.push({kind,id});return role},managementRoleRelated:async(_b,_t,_tenant,_env,id,kind,q)=>{calls.push({id,kind,...q});return {data:kind==='members'?[{id:'admin_A',userId:'admin_A',tenantId:tenant,environment:'TEST',isActive:true,startsAt:'2026-10-17T00:00:00Z',expiresAt:null,revokedAt:null}]:[{id:'permission_read',scope:'admin:read',tenantId:tenant,environment:'TEST'}],total:11,limit:q.limit,offset:q.offset}}};
+ const {ManagementCatalogWorkspace,parseCatalogRow}=load('ManagementCatalogWorkspace.tsx',api);let r;await act(async()=>{r=create(React.createElement(ManagementCatalogWorkspace,{...catalogProps,mode:'roles'}))});
+ await act(async()=>btn(r,'查看').props.onClick());assert.equal(calls[0].kind,'roles');await act(async()=>btn(r,'读取本租户成员').props.onClick());assert.equal(calls[1].kind,'members');await act(async()=>btn(r,'关联下一页').props.onClick());assert.equal(calls[2].offset,10);
+ await act(async()=>btn(r,'读取角色权限').props.onClick());assert.equal(calls[3].kind,'permissions');assert(text(r).includes('admin:read'));assert(text(r).includes('不授予新权限'));
+ assert.throws(()=>parseCatalogRow({...role,email:'hidden@synthetic.invalid'},'roles',tenant,'TEST'));assert.throws(()=>parseCatalogRow({...role,tenantId:'tenant_B'},'roles',tenant,'TEST'));
+ await act(async()=>r.unmount());
+});
+
+test('role read failure remains failure rather than Session or fabricated empty directory fallback',async()=>{
+ const tenant='b9_tenant_A_20261016',catalogProps={...props,tenantId:tenant,session:{...session,user:{...session.user,tenantId:tenant}}};
+ const api={managementRead:async()=>{throw new ApiError(503)}};
+ const {ManagementCatalogWorkspace}=load('ManagementCatalogWorkspace.tsx',api);let r;await act(async()=>{r=create(React.createElement(ManagementCatalogWorkspace,{...catalogProps,mode:'roles'}))});
+ assert.equal(r.root.findAllByProps({role:'alert'}).length,1);assert(!text(r).includes('匹配记录'));assert(!text(r).includes('READ_ONLY'));await act(async()=>r.unmount());
+});
