@@ -62,9 +62,10 @@ test('compiled: every real built resource is byte-identical; HTML/CSS dependenci
   }
   const html = await fs.readFile(path.join(compiled, 'public/index.html'), 'utf8')
   for (const [, ref] of html.matchAll(/(?:src|href)=["']([^"']+)["']/g)) {
-    if (ref === '/runtime-config.js') continue
     const url = new URL(ref, 'https://preview.invalid/')
-    assert.equal(url.origin, 'https://preview.invalid'); assert.ok(manifest[url.pathname], 'Missing built asset: ' + url.pathname)
+    assert.equal(url.origin, 'https://preview.invalid')
+    if (url.pathname === '/runtime-config.js') continue
+    assert.ok(manifest[url.pathname], 'Missing built asset: ' + url.pathname)
   }
   for (const url of Object.keys(manifest).filter(x => x.endsWith('.css'))) {
     const css = await fs.readFile(path.join(compiled, 'public', url.slice(1)), 'utf8')

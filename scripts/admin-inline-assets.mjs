@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 
+const decodedAssets = new Map()
 // Runs only after the unchanged Worker Access/window/API/config/health branches.
 export function serveInlineAsset(request, records) {
   const headers = new Headers({ 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' })
@@ -17,7 +18,16 @@ export function serveInlineAsset(request, records) {
   headers.set('etag', '"' + record.sha256 + '"')
   if (request.headers.get('if-none-match') === headers.get('etag')) return new Response(null, { status: 304, headers })
   headers.set('content-length', String(record.bytes))
-  const body = request.method === 'HEAD' ? null : Uint8Array.from(atob(record.base64), c => c.charCodeAt(0))
+  let body = null
+  if (request.method !== 'HEAD') {
+    if (!decodedAssets.has(record.sha256)) {
+      const decoded = typeof Uint8Array.fromBase64 === 'function'
+        ? Uint8Array.fromBase64(record.base64)
+        : Uint8Array.from(atob(record.base64), c => c.charCodeAt(0))
+      decodedAssets.set(record.sha256, decoded)
+    }
+    body = decodedAssets.get(record.sha256)
+  }
   return new Response(body, { status: 200, headers })
 }
 
@@ -41,7 +51,7 @@ export async function createInlineAssetModule(directory) {
   await walk()
   if (!records['/index.html'] || !Object.keys(records).some(x => x.endsWith('.js')) || !Object.keys(records).some(x => x.endsWith('.css'))) throw Error('COMPLETE_PUBLIC_ASSETS_REQUIRED')
   const manifest = Object.fromEntries(Object.entries(records).map(([key, { base64, ...metadata }]) => [key, metadata]))
-  const source = 'const records = Object.freeze(' + JSON.stringify(records) + ');\n' + serveInlineAsset.toString() + '\nexport const inlineAssetManifest = Object.freeze(' + JSON.stringify(manifest) + ');\nexport const fetchInlineAsset = request => serveInlineAsset(request, records);\n'
+  const source = 'const decodedAssets = new Map();\nconst records = Object.freeze(' + JSON.stringify(records) + ');\n' + serveInlineAsset.toString() + '\nexport const inlineAssetManifest = Object.freeze(' + JSON.stringify(manifest) + ');\nexport const fetchInlineAsset = request => serveInlineAsset(request, records);\n'
   if (Buffer.byteLength(source) > 2 * 1024 * 1024) throw Error('INLINE_MODULE_SIZE_REFUSED')
   return { source, manifest }
 }
