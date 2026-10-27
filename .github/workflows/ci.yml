@@ -47,7 +47,7 @@ jobs:
         run: npm install --prefix "$RUNNER_TEMP/fl-b17-wrangler" --no-save --ignore-scripts --no-audit --no-fund wrangler@4.114.0
       - name: Bind the fixed target, then publish the approved package
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEV_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_B17_ADMIN_PREVIEW_API_TOKEN }}
           HOSTED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEV_ACCOUNT_ID }}
           WRANGLER_BIN: ${{ runner.temp }}/fl-b17-wrangler/node_modules/.bin/wrangler
           PREVIEW_RESULT_FILE: ${{ runner.temp }}/fl-b17-admin-preview-result.json
