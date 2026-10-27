@@ -1,0 +1,4 @@
+da0619def9803f14828e31a8a1da97c7fa35f23dd63bb781f0d48cd0ebf6ede8  package.json
+4348ea0f8d77b5d559230d7dd30e7101fcef6e27191e0d2b4900e2217eac0719  package-lock.json
+a5093f90fc15e0aaae4319a46ecca639e3d515d8d9a4a8db2b84198c321d3538  tests/adminDependencyPatch.test.mjs
+ac2b39ba592f1c5eaa3c5adeacc01a603cbab88e9d713eadbc9c0490e9a4189e  docs/governance/FL-LAUNCH-B17-ADMIN-DEPENDENCY-PATCH.md
