@@ -266,4 +266,24 @@ export const adminRoutes = {
     `${adminRoutes.card(tenantId, cardId)}/unfreeze`,
   cardFees: (tenantId: string, cardId: string) =>
     `${adminRoutes.card(tenantId, cardId)}/fees`,
+  walletAccountHistory: (
+    tenantId: string,
+    accountId: string,
+    environment: Extract<DataSource, 'SANDBOX' | 'TEST'>,
+    query: AdminWalletOperationQuery,
+  ) => {
+    if (!/^[A-Za-z0-9._:-]{2,128}$/.test(accountId)) throw new Error('Wallet account is invalid')
+    return `${adminRoutes.tenant(tenantId)}/wallet/accounts/${segment(accountId)}/history?${walletOperationQuery(environment, query)}`
+  },
+  walletAssetSummary: (
+    tenantId: string,
+    environment: Extract<DataSource, 'SANDBOX' | 'TEST'>,
+    customerId?: string,
+  ) => {
+    if (!(environment === 'SANDBOX' || environment === 'TEST')) throw new Error('Wallet asset summary environment is invalid')
+    if (customerId !== undefined && !/^[A-Za-z0-9_-]{2,100}$/.test(customerId)) throw new Error('Wallet asset summary customer is invalid')
+    const params = new URLSearchParams({ environment })
+    if (customerId) params.set('customerId', customerId)
+    return `${adminRoutes.tenant(tenantId)}/wallet/asset-summary?${params.toString()}`
+  },
 }

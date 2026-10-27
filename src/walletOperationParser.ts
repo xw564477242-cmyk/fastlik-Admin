@@ -52,7 +52,7 @@ export class WalletOperationContractError extends Error {
   readonly name = 'WalletOperationContractError'
 }
 
-const fail = (path: string, reason: string): never => {
+function fail(path: string, reason: string): never {
   throw new WalletOperationContractError(`${path}: ${reason}`)
 }
 

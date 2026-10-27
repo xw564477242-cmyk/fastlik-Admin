@@ -1,4 +1,7 @@
+import { MAX_WALLET_ASSET_SUMMARY_JSON_BYTES, parseWalletAssetSummaryResponse, type WalletAssetSummary, type WalletAssetSummaryEnvironment } from './walletAssetSummaryContract'
+import { previewBrowserRequestAllowed } from './launch/preview-readonly-policy'
 import { runtimeConfig } from './runtimeConfig'
+import { launchAdminRequestAllowed } from './launchReadOnlyContract'
 import { adminRoutes, type AdminCardTransactionQuery, type AdminWalletOperationQuery, type DataSource } from './adminRoutes'
 import { MAX_CARD_WORKSPACE_JSON_BYTES } from './cardWorkspaceContract'
 import { MAX_CARD_TRANSACTION_JSON_BYTES } from './cardTransactionContract'
@@ -20,9 +23,9 @@ export type Health = {
 export type AdminSession = {accessToken:string;tokenType:'Bearer';expiresInSeconds:number;expiresAt:string;user:{id:string;email:string;tenantId:string;environment:'SANDBOX'|'TEST'|'UAT'|'PRODUCTION';roles:string[];permissions:string[]}}
 export type Tenant = TenantDetail
 export type CardFeeValues={cardIssueFee?:string;cardMonthlyFee?:string;usdtDepositRate?:string;cardSpendRate?:string;assetWithdrawRate?:string;cashWithdrawRate?:string;thirdPartyPayRate?:string;referralFeeRate?:string}
-export type CardProductTemplate=CardFeeValues&{id:string;tenantId:string;environment:'SANDBOX';code:string;name:string;cardType:'VIRTUAL'|'PHYSICAL';currency:string;active:boolean}
+export type CardProductTemplate={ [K in keyof CardFeeValues]?: string | null }&{id:string;tenantId:string;environment:'SANDBOX'|'TEST'|'PRODUCTION';code:string;name:string;cardType:'VIRTUAL'|'PHYSICAL';currency:string;active:boolean}
 export type UpdatedCardProductTemplate=CardProductTemplate&{journalId:string;externalProviderCalled:false}
-export type TenantFeePolicy={id:string;version:number;active:boolean;referralFeeRateCap:string;referralFeeRateDefault:string;platformReferralFeeRateCap:string;caps:Required<CardFeeValues>;effectiveAt:string}
+export type TenantFeePolicy={id:string;version:number;active:boolean;referralFeeRateCap:string;referralFeeRateDefault:string;platformReferralFeeRateCap:string;caps:Required<CardFeeValues>;defaults?:Required<CardFeeValues>;effectiveAt:string}
 export type UpdatedTenantFeePolicy=TenantFeePolicy&{journalId:string;externalProviderCalled:false}
 export type CardApplication={id:string;status:'APPROVED'|'FEE_WAIVED';cardId:string;cardType:'VIRTUAL'|'PHYSICAL';currency:string;productTemplateId:string;templateOpeningFee:string;approvedOpeningFee:string;feeAdjustmentReason?:string|null;openingFeeJournalId?:string|null;externalProviderCalled:false;card:{id:string;status:string;last4?:string;alias?:string}}
 export type TrialBalance = {assetCode:string;debit:string;credit:string;balanced:boolean}
@@ -86,13 +89,16 @@ const readBoundedResponseText=async(response:Response,maxBytes:number):Promise<s
 }
 
 export async function apiRequest<T>(path:string,token?:string,method='GET',body?:unknown,responsePolicy:ApiResponsePolicy=jsonResponsePolicy,externalSignal?:AbortSignal):Promise<T>{
+  if (runtimeConfig.previewReadOnly && !previewBrowserRequestAllowed(path, method)) throw new Error('Preview business mutation or route refused')
+
+ if(!launchAdminRequestAllowed(path,method.toUpperCase()))throw new ApiError(0,path,'launch-readonly','首发只读后台不支持此业务操作')
  const controller=new AbortController();const timeout=window.setTimeout(()=>controller.abort(),20_000);const trace=newTrace()
  const abortFromCaller=()=>controller.abort()
  if(externalSignal?.aborted)controller.abort()
  else externalSignal?.addEventListener('abort',abortFromCaller,{once:true})
  try{
   const response=await fetch(`${DEFAULT_API}${path}`,{
-   mode:'cors',credentials:'omit',cache:'no-store',signal:controller.signal,method,
+   mode:'cors',...(runtimeConfig.previewReadOnly && DEFAULT_API==='/api' ? {credentials:'same-origin' as const} : {credentials:'omit' as const}),cache:'no-store',signal:controller.signal,method,
    headers:{Accept:'application/json','X-Trace-Id':trace,...(body?{'Content-Type':'application/json'}:{}),...(token?{Authorization:`Bearer ${token}`}:{})},
    ...(body?{body:JSON.stringify(body)}:{})
   })
@@ -140,8 +146,19 @@ async function health(path:string):Promise<Health>{
  }
 }
 
+export type AdminReadQuery = {limit?:number;offset?:number;status?:string;search?:string;merchantId?:string;assetCode?:string;from?:string;to?:string;category?:string;result?:string;operation?:string;traceId?:string;kycStatus?:string;resource?:string;action?:string;requestId?:string}
+const readQuery=(environment:DataSource,filters:AdminReadQuery={})=>new URLSearchParams(Object.entries({environment,limit:25,offset:0,...filters}).filter(([,v])=>v!==undefined&&v!=='').map(([k,v])=>[k,String(v)])).toString()
 const query=(environment:DataSource)=>`environment=${encodeURIComponent(environment)}`
 export const productionApi={
+ managementRoleRelated:(_base:string,token:string,tenantId:string,environment:DataSource,roleId:string,kind:'members'|'permissions',filters:AdminReadQuery={},signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/management/roles/${encodeURIComponent(roleId)}/${kind}?${readQuery(environment,filters)}`,token,'GET',undefined,jsonResponsePolicy,signal),
+ evidenceDetail:(_base:string,token:string,tenantId:string,environment:DataSource,id:string,signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/evidence/${encodeURIComponent(id)}?${query(environment)}`,token,'GET',undefined,jsonResponsePolicy,signal),
+ managementRead:(_base:string,token:string,tenantId:string,environment:DataSource,kind:'branding'|'products'|'audit'|'capabilities'|'roles',filters:AdminReadQuery={},signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/management/${kind}?${kind==='products'||kind==='audit'||kind==='roles'?readQuery(environment,filters):query(environment)}`,token,'GET',undefined,jsonResponsePolicy,signal),
+ managementDetail:(_base:string,token:string,tenantId:string,environment:DataSource,kind:'products'|'audit'|'roles',id:string,signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/management/${kind}/${encodeURIComponent(id)}?${query(environment)}`,token,'GET',undefined,jsonResponsePolicy,signal),
+ supportCases:(_base:string,token:string,tenantId:string,traceId:string,signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/support-cases?traceId=${encodeURIComponent(traceId)}`,token,'GET',undefined,jsonResponsePolicy,signal),
+ supportCase:(_base:string,token:string,tenantId:string,id:string,signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/support-cases/${encodeURIComponent(id)}`,token,'GET',undefined,jsonResponsePolicy,signal),
+ createSupportCase:(_base:string,token:string,tenantId:string,body:{traceId:string;reason:string},signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/support-cases`,token,'POST',body,jsonResponsePolicy,signal),
+ manageSupportCase:(_base:string,token:string,tenantId:string,id:string,body:{status:string;resolution:string|null;version:number},signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/support-cases/${encodeURIComponent(id)}`,token,'PATCH',body,jsonResponsePolicy,signal),
+ cardSupportAudit:(_base:string,token:string,tenantId:string,traceId:string,signal?:AbortSignal)=>apiRequest<string>(`/admin/tenants/${encodeURIComponent(tenantId)}/operations/card-support/${encodeURIComponent(traceId)}`,token,'GET',undefined,{format:'bounded-text',maxBytes:32768},signal),
  health:(_base:string)=>health('/health'),
  systemReadiness:(_base:string)=>health('/health/readiness'),
  login:(_base:string,tenantId:string,email:string,password:string)=>apiRequest<AdminSession>('/admin/auth/login',undefined,'POST',{tenantId,email,password}),
@@ -155,22 +172,28 @@ export const productionApi={
  settlementDashboard:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Record<string,unknown>>(`/admin/tenants/${tenantId}/dashboards/settlement?${query(environment)}`,key),
  riskDashboard:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Record<string,unknown>>(`/admin/tenants/${tenantId}/dashboards/risk?${query(environment)}`,key),
  reconciliation:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Reconciliation>(`/admin/tenants/${tenantId}/settlement/reconciliation?${query(environment)}`,key),
- trialBalance:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<TrialBalance[]>(`/admin/tenants/${tenantId}/ledger/trial-balance?${query(environment)}`,key),
+ trialBalance:(_base:string,key:string,tenantId:string,environment:DataSource,signal?:AbortSignal)=>apiRequest<TrialBalance[]>(`/admin/tenants/${tenantId}/ledger/trial-balance?${query(environment)}`,key,'GET',undefined,jsonResponsePolicy,signal),
  treasuryLiquidity:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryLiquidity(tenantId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_RECONCILIATION_JSON_BYTES},signal),
  treasuryReconciliation:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryReconciliation(tenantId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_RECONCILIATION_JSON_BYTES},signal),
  treasuryTrialBalance:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryTrialBalance(tenantId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_RECONCILIATION_JSON_BYTES},signal),
  treasuryDailyClosing:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryDailyClosing(tenantId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_RECONCILIATION_JSON_BYTES},signal),
  treasuryFundsInstruction:(_base:string,key:string,tenantId:string,operationId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.treasuryFundsInstruction(tenantId,operationId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_TREASURY_FUNDS_INSTRUCTION_JSON_BYTES},signal),
- accounts:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<WalletAccount[]>(`/admin/tenants/${tenantId}/ledger/accounts?${query(environment)}`,key),
- journals:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Journal[]>(`/admin/tenants/${tenantId}/ledger/journals?${query(environment)}`,key),
+ accounts:(_base:string,key:string,tenantId:string,environment:DataSource,signal?:AbortSignal)=>apiRequest<WalletAccount[]>(`/admin/tenants/${tenantId}/ledger/accounts?${query(environment)}`,key,'GET',undefined,jsonResponsePolicy,signal),
+ journals:(_base:string,key:string,tenantId:string,environment:DataSource,signal?:AbortSignal)=>apiRequest<Journal[]>(`/admin/tenants/${tenantId}/ledger/journals?${query(environment)}`,key,'GET',undefined,jsonResponsePolicy,signal),
  walletOperations:(_base:string,key:string,tenantId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,query:AdminWalletOperationQuery,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.walletOperations(tenantId,environment,query),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_WALLET_OPERATION_LIST_JSON_BYTES},signal),
  walletTransactions:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(adminRoutes.walletTransactions(tenantId,environment),key),
  walletOperation:(_base:string,key:string,tenantId:string,operationId:string,environment:DataSource)=>apiRequest<unknown>(adminRoutes.walletOperation(tenantId,operationId,environment),key),
  contamination:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Contamination>(`/admin/tenants/${tenantId}/operations/mock-contamination?${query(environment)}`,key),
- merchants:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Page<Merchant>>(`/admin/tenants/${tenantId}/merchants?${query(environment)}&limit=100`,key),
- merchantPayments:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<Page<MerchantPayment>>(`/admin/tenants/${tenantId}/merchant/payments?${query(environment)}&limit=100`,key),
- apiClients:(_base:string,key:string,tenantId:string)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/api-clients`,key),
- events:(_base:string,key:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/events?${query(environment)}`,key),
+ adminUsers:(_base:string,key:string,tenantId:string,environment:DataSource,filters:AdminReadQuery={},signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/users?${readQuery(environment,filters)}`,key,'GET',undefined,jsonResponsePolicy,signal),
+ adminUserDirectoryDetail:(_base:string,key:string,tenantId:string,environment:DataSource,id:string,signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/users/${encodeURIComponent(id)}?${query(environment)}`,key,'GET',undefined,jsonResponsePolicy,signal),
+ merchants:(_base:string,key:string,tenantId:string,environment:DataSource,filters:AdminReadQuery={},signal?:AbortSignal)=>apiRequest<Page<Merchant>>(`/admin/tenants/${encodeURIComponent(tenantId)}/merchants?${readQuery(environment,filters)}`,key,'GET',undefined,jsonResponsePolicy,signal),
+ merchantPayments:(_base:string,key:string,tenantId:string,environment:DataSource,filters:AdminReadQuery={},signal?:AbortSignal)=>apiRequest<Page<MerchantPayment>>(`/admin/tenants/${encodeURIComponent(tenantId)}/merchant/payments?${readQuery(environment,filters)}`,key,'GET',undefined,jsonResponsePolicy,signal),
+ merchantDetail:(_base:string,key:string,tenantId:string,environment:DataSource,merchantId:string,signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/merchants/${encodeURIComponent(merchantId)}?${query(environment)}`,key,'GET',undefined,jsonResponsePolicy,signal),
+ merchantPaymentDetail:(_base:string,key:string,tenantId:string,environment:DataSource,paymentId:string,signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/merchant/payments/${encodeURIComponent(paymentId)}?${query(environment)}`,key,'GET',undefined,jsonResponsePolicy,signal),
+ apiClients:(_base:string,key:string,tenantId:string,filters?:AdminReadQuery,signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/api-clients${filters?'?'+new URLSearchParams(Object.entries(filters).filter(([,v])=>v!==undefined&&v!=='').map(([k,v])=>[k,String(v)])).toString():''}`,key,'GET',undefined,jsonResponsePolicy,signal),
+ apiClient:(_base:string,key:string,tenantId:string,id:string,signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/api-clients/${encodeURIComponent(id)}`,key,'GET',undefined,jsonResponsePolicy,signal),
+ events:(_base:string,key:string,tenantId:string,environment:DataSource,filters?:AdminReadQuery,signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/events?${filters?readQuery(environment,filters):query(environment)}`,key,'GET',undefined,jsonResponsePolicy,signal),
+ event:(_base:string,key:string,tenantId:string,environment:DataSource,id:string,signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/events/${encodeURIComponent(id)}?${query(environment)}`,key,'GET',undefined,jsonResponsePolicy,signal),
  adminKyc:async(_base:string,key:string,tenantId:string,environment:AdminKycEnvironment,userId:string,signal?:AbortSignal):Promise<AdminKycRecord>=>parseAdminKycResponse(await apiRequest<string>(adminKycPath(tenantId,userId,environment),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_ADMIN_KYC_JSON_BYTES},signal),userId),
  cardSnapshot:(_base:string,key:string,tenantId:string,cardId:string,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.cardSnapshot(tenantId,cardId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES},signal),
  cardProducts:(_base:string,key:string,tenantId:string)=>apiRequest<CardProductTemplate[]>(adminRoutes.cardProducts(tenantId),key),
@@ -188,7 +211,9 @@ export const productionApi={
  freezeCard:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.freezeCard(tenantId,cardId),key,'POST',{idempotencyKey:crypto.randomUUID()},{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
  unfreezeCard:(_base:string,key:string,tenantId:string,cardId:string)=>apiRequest<string>(adminRoutes.unfreezeCard(tenantId,cardId),key,'POST',{idempotencyKey:crypto.randomUUID()},{format:'bounded-text',maxBytes:MAX_CARD_WORKSPACE_JSON_BYTES}),
  trace:(_base:string,key:string,tenantId:string,environment:DataSource,id:string)=>apiRequest<TraceReport>(`/admin/tenants/${tenantId}/operations/traces/${encodeURIComponent(id)}?${query(environment)}`,key),
- evidence:(_base:string,token:string,tenantId:string,environment:DataSource)=>apiRequest<unknown>(`/admin/tenants/${tenantId}/evidence?${query(environment)}&limit=100`,token),
+ evidence:(_base:string,token:string,tenantId:string,environment:DataSource,filters:AdminReadQuery={},signal?:AbortSignal)=>apiRequest<unknown>(`/admin/tenants/${encodeURIComponent(tenantId)}/evidence?${readQuery(environment,filters)}`,token,'GET',undefined,jsonResponsePolicy,signal),
  evidenceSummary:(_base:string,token:string,tenantId:string,environment:DataSource)=>apiRequest<EvidenceSummary>(`/admin/tenants/${tenantId}/evidence/summary?${query(environment)}`,token),
  dailyClosing:(_base:string,token:string,tenantId:string,environment:DataSource)=>apiRequest<FinancialOperationalReport>(`/admin/tenants/${tenantId}/settlement/daily-closing?${query(environment)}`,token),
+  walletAccountHistory:(_base:string,key:string,tenantId:string,accountId:string,environment:Extract<DataSource,'SANDBOX'|'TEST'>,query:AdminWalletOperationQuery,signal?:AbortSignal)=>apiRequest<string>(adminRoutes.walletAccountHistory(tenantId,accountId,environment,query),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_WALLET_OPERATION_LIST_JSON_BYTES},signal),
+  walletAssetSummary:async(_base:string,key:string,tenantId:string,environment:WalletAssetSummaryEnvironment,customerId?:string,signal?:AbortSignal):Promise<WalletAssetSummary>=>parseWalletAssetSummaryResponse(await apiRequest<string>(adminRoutes.walletAssetSummary(tenantId,environment,customerId),key,'GET',undefined,{format:'bounded-text',maxBytes:MAX_WALLET_ASSET_SUMMARY_JSON_BYTES},signal),{tenantId,environment,customerId}),
 }

@@ -1,3 +1,5 @@
+import { resolveBuildIdentity } from './buildIdentity'
+
 export type FastLinkEnvironment = 'LOCAL' | 'SANDBOX' | 'TEST' | 'UAT' | 'PRODUCTION'
 
 function required(name: string): string {
@@ -21,15 +23,17 @@ if (['SANDBOX', 'TEST', 'PRODUCTION'].includes(environment) && apiUrl !== '/api'
   throw new Error(`${environment} Cloudflare Admin must use same-origin /api`)
 }
 
-const runtimeBuildSha = window.__FASTLINK_RUNTIME__?.buildSha?.trim()
-const verifiedRuntimeBuildSha = runtimeBuildSha && /^[0-9a-f]{40}$/i.test(runtimeBuildSha)
-  ? runtimeBuildSha
-  : undefined
+const buildIdentity = resolveBuildIdentity({
+  buildSha: import.meta.env.VITE_FASTLINK_BUILD_SHA,
+  runtimeBuildSha: window.__FASTLINK_RUNTIME__?.buildSha,
+  candidateId: import.meta.env.VITE_FASTLINK_CANDIDATE_ID,
+  sourceSnapshot: import.meta.env.VITE_FASTLINK_SOURCE_SNAPSHOT,
+})
 
 export const runtimeConfig = Object.freeze({
   environment,
   apiUrl,
-  buildSha: verifiedRuntimeBuildSha
-    || (import.meta.env.VITE_FASTLINK_BUILD_SHA as string | undefined)?.trim()
-    || 'unknown',
+  buildSha: buildIdentity.sourceCommit,
+  buildIdentity,
+  previewReadOnly: import.meta.env.VITE_FASTLINK_PREVIEW_MODE === 'READ_ONLY',
 })

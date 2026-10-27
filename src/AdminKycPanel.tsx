@@ -33,11 +33,12 @@ type Props = Readonly<{
   runtimeEnvironment: string | undefined
   readKyc: AdminKycReader
   invalidateSession: (expectedAccessToken: string) => void
+  initialUserId?: string
 }>
 
 type Snapshot = Readonly<{ scope: string; value: AdminKycRecord }>
 
-export function AdminKycPanel({ session, tenantId, runtimeEnvironment, readKyc, invalidateSession }: Props) {
+export function AdminKycPanel({ session, tenantId, runtimeEnvironment, readKyc, invalidateSession, initialUserId = '' }: Props) {
   const [lookup, setLookup] = useState('')
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
   const [busy, setBusy] = useState(false)
@@ -61,11 +62,11 @@ export function AdminKycPanel({ session, tenantId, runtimeEnvironment, readKyc, 
   invalidateSessionRef.current = invalidateSession
 
   useEffect(() => {
-    setLookup('')
+    setLookup(/^[A-Za-z0-9_-]{2,128}$/.test(initialUserId) ? initialUserId : '')
     setSnapshot(null)
     setBusy(false)
     setError('')
-  }, [baseScope])
+  }, [baseScope, initialUserId])
 
   const changeLookup = (next: string) => {
     abortCurrentRequest(lifecycle.requestAbort)
