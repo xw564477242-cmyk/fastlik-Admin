@@ -11,6 +11,12 @@ on:
         description: Sealed transport commit, never a UI rebuild identity
         required: true
         type: string
+      operation:
+        description: Explicit sealed operation
+        required: true
+        default: READ_ONLY
+        type: choice
+        options: [READ_ONLY, PUBLISH]
 
 permissions:
   contents: read
@@ -29,7 +35,7 @@ jobs:
 
   admin-preview:
     name: Fixed sealed revenue Admin preview
-    if: github.event_name == 'workflow_dispatch' && github.repository == 'xw564477242-cmyk/fastlik-Admin' && github.ref == 'refs/heads/codex/fl-b17-revenue-read-ci-20261029' && github.run_attempt == 1 && github.sha == inputs.approved_commit
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'xw564477242-cmyk/fastlik-Admin' && github.ref == 'refs/heads/codex/fl-b17-revenue-read-ci-20261029' && github.run_attempt == 1 && github.sha == inputs.approved_commit && inputs.operation == 'PUBLISH'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: cloudflare-admin-dev
@@ -63,5 +69,42 @@ jobs:
         with:
           name: fl-b17-revenue-preview-result-${{ github.sha }}
           path: ${{ runner.temp }}/fl-b17-revenue-preview-result.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  admin-metadata-readonly:
+    name: Fixed Admin metadata read only
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'xw564477242-cmyk/fastlik-Admin' && github.ref == 'refs/heads/codex/fl-b17-revenue-read-ci-20261029' && github.run_attempt == 1 && github.sha == inputs.approved_commit && inputs.operation == 'READ_ONLY'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: cloudflare-admin-dev
+    concurrency:
+      group: fl-b17-fixed-admin-preview
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Only new read-only projection tests
+        run: node --test scripts/admin-readonly-metadata-ci.test.mjs
+      - name: Three fixed metadata GETs, no Wrangler or publish
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_B17_ADMIN_PREVIEW_API_TOKEN }}
+          HOSTED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEV_ACCOUNT_ID }}
+          SEALED_COMMIT: ${{ inputs.approved_commit }}
+          READONLY_METADATA_ONLY: 'true'
+          APPROVED_READER_SHA: e9757971bff6eac3659e66691a11b4e1fd558a83aef9e75707d4b71199625251
+          READONLY_RESULT_FILE: ${{ runner.temp }}/fl-b17-admin-metadata-readonly.json
+        run: node scripts/admin-readonly-metadata-ci.mjs
+      - name: Only safe metadata projection receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fl-b17-admin-metadata-readonly-${{ github.sha }}
+          path: ${{ runner.temp }}/fl-b17-admin-metadata-readonly.json
           if-no-files-found: warn
           retention-days: 7
