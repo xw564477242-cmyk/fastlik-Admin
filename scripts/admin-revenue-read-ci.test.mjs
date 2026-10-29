@@ -36,9 +36,15 @@ test('safe settings never access secret or unknown plain-text binding values',()
   const unknown={name:'PRIVATE_SETTING',type:'plain_text',get text(){return forbidden()}}
   const safe=safeSettings({bindings:[secret,unknown,{name:'ASSETS',type:'assets'},
     {name:'FASTLINK_PREVIEW_DEPLOYMENT_PROFILE',type:'plain_text',text:'B17_READONLY_MONTH_V1'},
-    {name:'B17_RETENTION_UNTIL_UTC',type:'plain_text',text:'2026-11-23T12:34:22.235Z'}]})
+    ...['B17_RETENTION_UNTIL_UTC','B17_WINDOW_OPEN_UTC','B17_WINDOW_CLOSE_UTC',
+      'B17_QUALIFY_UNTIL_UTC','B17_PAID_START_UTC','B17_PAID_STOP_UTC'].map(name=>
+        ({name,type:'plain_text',text:'2026-11-23T12:34:22.235Z'})),
+    {name:'B17_WINDOW_PHASE',type:'plain_text',text:'OPEN'}]})
   assert.deepEqual(safe.bindings.find(x=>x.name==='SECRET_TEST'),{name:'SECRET_TEST',type:'secret_text'})
   assert(!JSON.stringify(safe).includes('PRIVATE_SETTING":'))
+  assert.equal(Object.keys(safe.lease).length,8)
+  assert.equal(safe.lease.B17_WINDOW_PHASE,'OPEN')
+  assert.equal(safe.lease.B17_WINDOW_CLOSE_UTC,'2026-11-23T12:34:22.235Z')
 })
 test('current active version is acquired fully and drift blocks publish',async()=>{
   let n=0;const r=await release(env(),deps({metadata:async()=>({...snapshot(),version:next}),publish:async()=>{n++}}))

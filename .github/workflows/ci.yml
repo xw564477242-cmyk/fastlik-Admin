@@ -53,7 +53,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEV_API_TOKEN }}
           HOSTED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEV_ACCOUNT_ID }}
           SEALED_COMMIT: ${{ inputs.approved_commit }}
-          APPROVED_PUBLISHER_SHA: f7e572c84a4626085ef82f441487d16c42665f86f29c407fbf4252fb159eb5f5
+          APPROVED_PUBLISHER_SHA: 161ad11754ddd1b926fa9eb8e3256407768d6d3a1308e2ea058a213a591739fb
           WRANGLER_BIN: ${{ runner.temp }}/fl-b17-wrangler/node_modules/.bin/wrangler
           PREVIEW_RESULT_FILE: ${{ runner.temp }}/fl-b17-revenue-preview-result.json
         run: node scripts/admin-revenue-read-ci.mjs

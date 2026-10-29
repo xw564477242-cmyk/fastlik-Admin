@@ -20,7 +20,9 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const moduleNames = ['admin-inline-public.mjs','admin-release-identity.mjs','admin-restored-read-routing.mjs','safe-preview-diagnostics.mjs','worker.js']
 const publicNames = ['assets/index-B0-ww0NP.js','assets/index-Cisn8fL9.css','index.html']
 const retainedTypes = ['plain_text','json','secret_text','secret_key','assets']
-const leaseNames = new Set(['FASTLINK_PREVIEW_DEPLOYMENT_PROFILE','B17_RETENTION_UNTIL_UTC','B17_READONLY_OPEN_UNTIL_UTC','B17_PREPARATION_UNTIL_UTC'])
+const leaseNames = new Set(['FASTLINK_PREVIEW_DEPLOYMENT_PROFILE','B17_WINDOW_PHASE',
+  'B17_RETENTION_UNTIL_UTC','B17_WINDOW_OPEN_UTC','B17_WINDOW_CLOSE_UTC',
+  'B17_QUALIFY_UNTIL_UTC','B17_PAID_START_UTC','B17_PAID_STOP_UTC'])
 export class Stop extends Error {
   constructor(code, details={}) {super(code); this.code=code; this.details=details}
 }
@@ -107,6 +109,8 @@ export function safeSettings(value) {
     if(typeof b.text!=='string') throw new Stop('LEASE_METADATA_INVALID')
     if(b.name==='FASTLINK_PREVIEW_DEPLOYMENT_PROFILE') {
       if(b.text!=='B17_READONLY_MONTH_V1') throw new Stop('PROFILE_DRIFT')
+    } else if(b.name==='B17_WINDOW_PHASE') {
+      if(!/^[A-Z_]{1,32}$/.test(b.text)) throw new Stop('LEASE_METADATA_INVALID')
     } else if(!Number.isFinite(Date.parse(b.text))) throw new Stop('LEASE_METADATA_INVALID')
     lease[b.name]=b.text
   }
