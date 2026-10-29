@@ -50,19 +50,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Only new sealed delivery guard tests
-        run: node --test scripts/admin-revenue-read-ci.test.mjs scripts/admin-revenue-read-ci-preservation.test.mjs
-      - name: Install the historical pinned Wrangler without credentials or lifecycle scripts
-        run: npm install --prefix "$RUNNER_TEMP/fl-b17-wrangler" --no-save --ignore-scripts --no-audit --no-fund wrangler@4.114.0
-      - name: Verify sealed input, bind metadata, publish exactly once
+      - name: Only native version publication tests
+        run: node --test scripts/admin-native-version-ci.test.mjs
+      - name: Verify sealed input and native version upload then exact cutover
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_B17_ADMIN_PREVIEW_API_TOKEN }}
           HOSTED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEV_ACCOUNT_ID }}
           SEALED_COMMIT: ${{ inputs.approved_commit }}
-          APPROVED_PUBLISHER_SHA: 0611f43b697b98cc110df052d39b0236060f6c839c4f16d8d28d3101c059781a
-          WRANGLER_BIN: ${{ runner.temp }}/fl-b17-wrangler/node_modules/.bin/wrangler
+          NATIVE_VERSION_PUBLISH: 'true'
+          APPROVED_NATIVE_PUBLISHER_SHA: 50b0c40810fb18d759356a491951f0f0c0a07fd548199b1a28febd2701bcf258
           PREVIEW_RESULT_FILE: ${{ runner.temp }}/fl-b17-revenue-preview-result.json
-        run: node scripts/admin-revenue-read-ci.mjs
+        run: node scripts/admin-native-version-ci.mjs
       - name: Only the non-secret release receipt
         if: always()
         uses: actions/upload-artifact@v4
@@ -97,7 +95,7 @@ jobs:
           HOSTED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEV_ACCOUNT_ID }}
           SEALED_COMMIT: ${{ inputs.approved_commit }}
           READONLY_METADATA_ONLY: 'true'
-          APPROVED_READER_SHA: e9757971bff6eac3659e66691a11b4e1fd558a83aef9e75707d4b71199625251
+          APPROVED_READER_SHA: 61fb8c62af2bacf0abb33ce4d8b24ba434b778f7cacbaf7e7acac2e3fbfc3aab
           READONLY_RESULT_FILE: ${{ runner.temp }}/fl-b17-admin-metadata-readonly.json
         run: node scripts/admin-readonly-metadata-ci.mjs
       - name: Only safe metadata projection receipt

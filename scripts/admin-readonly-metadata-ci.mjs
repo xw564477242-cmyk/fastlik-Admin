@@ -47,8 +47,8 @@ function assetProjection(parent,key) {
     config:field(value,'config',v=>shape(v,{html_handling:string,not_found_handling:string,
       base_path:string,run_worker_first:v=>bool(v)||strings(v)}))}
 }
-export function projectVersion(value) {
-  if(!object(value)||value.id!==activeVersion||!object(value.resources)||
+export function projectVersion(value,expectedVersion=activeVersion) {
+  if(!uuid.test(expectedVersion)||!object(value)||value.id!==expectedVersion||!object(value.resources)||
       !object(value.resources.script_runtime))throw new Stop('FIXED_VERSION_METADATA_REFUSED')
   const runtime=value.resources.script_runtime
   const script=object(value.resources.script)?value.resources.script:{}
