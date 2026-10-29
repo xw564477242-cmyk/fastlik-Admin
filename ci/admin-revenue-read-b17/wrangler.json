@@ -1,0 +1,34 @@
+{
+  "account_id": "af8ac20dee08abe5ec98a892ae83873e",
+  "name": "fastlink-admin-preview-b13",
+  "main": "./frontend/worker.js",
+  "compatibility_date": "2026-07-25",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": true,
+  "preview_urls": false,
+  "routes": [],
+  "no_bundle": true,
+  "rules": [
+    {
+      "type": "ESModule",
+      "globs": [
+        "**/*.js",
+        "**/*.mjs"
+      ]
+    }
+  ],
+  "unsafe": {
+    "metadata": {
+      "keep_assets": true,
+      "keep_bindings": [
+        "plain_text",
+        "json",
+        "secret_text",
+        "secret_key",
+        "assets"
+      ]
+    }
+  }
+}

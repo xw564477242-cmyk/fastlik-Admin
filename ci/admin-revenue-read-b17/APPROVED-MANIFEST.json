@@ -1,0 +1,92 @@
+{
+  "format": "B17_REVENUE_CI_SEALED_INPUT_V1",
+  "historicalBase": "e1868a60ce2ecc518624552bcba67b5ed4f2d262",
+  "uiHistoricalBase": "bf72fcc33962576049ae077e80286a06b9f46fb5",
+  "sourceSnapshot": "72e2068f3da57751c3e779ceb2315391df568777f9cdb9c6f712b471828aca33",
+  "transportCommitMeaning": "TRANSPORT_ONLY_NOT_UI_REBUILD",
+  "originalFiveModuleArchiveSHA256": "06f7f621b0bf03b7e611126ac9eec4d95c6a0d259e5707dcc8147e266bd55720",
+  "modules": [
+    "frontend/admin-inline-public.mjs",
+    "frontend/admin-release-identity.mjs",
+    "frontend/admin-restored-read-routing.mjs",
+    "frontend/safe-preview-diagnostics.mjs",
+    "frontend/worker.js"
+  ],
+  "publicDelta": [
+    {
+      "path": "public-delta/assets/index-B0-ww0NP.js",
+      "url": "/assets/index-B0-ww0NP.js",
+      "sha256": "e2b69011cd3a79d230fb75e28eb18c6198d3f281b6e86b95f960fe6c743db2e4",
+      "bytes": 413179,
+      "delivery": "IDENTICAL_BYTES_EMBEDDED_IN_ADMIN_INLINE_PUBLIC; NO_SEPARATE_ASSETS_UPLOAD"
+    },
+    {
+      "path": "public-delta/assets/index-Cisn8fL9.css",
+      "url": "/assets/index-Cisn8fL9.css",
+      "sha256": "f4fc6f8918f7bcc9beb6716834c0ddff2126f0a16596beb44ebbe51adb7f0cd0",
+      "bytes": 17964,
+      "delivery": "IDENTICAL_BYTES_EMBEDDED_IN_ADMIN_INLINE_PUBLIC; NO_SEPARATE_ASSETS_UPLOAD"
+    },
+    {
+      "path": "public-delta/index.html",
+      "url": "/index.html",
+      "sha256": "099ceeb3fa2037f892826408e0ef8f2c8f0070597335ba2387d012e4120d7582",
+      "bytes": 538,
+      "delivery": "IDENTICAL_BYTES_EMBEDDED_IN_ADMIN_INLINE_PUBLIC; NO_SEPARATE_ASSETS_UPLOAD"
+    }
+  ],
+  "publicDelivery": "Embedded original bytes in sealed inline module; public-delta files are integrity witnesses only; no directory upload or runtime-config change",
+  "existingAssets": "KEEP_ASSETS_AND_ASSETS_BINDING; no separate assets upload",
+  "files": [
+    {
+      "path": "ORIGINAL-FIVE-MODULES.tar.gz",
+      "bytes": 195395,
+      "sha256": "06f7f621b0bf03b7e611126ac9eec4d95c6a0d259e5707dcc8147e266bd55720"
+    },
+    {
+      "path": "frontend/admin-inline-public.mjs",
+      "bytes": 578019,
+      "sha256": "b843a66f8f52922040eca56199ce169b3978352edc75fb36fe661c283ff4369a"
+    },
+    {
+      "path": "frontend/admin-release-identity.mjs",
+      "bytes": 298,
+      "sha256": "ff66739da64f9c50452b98206ba1f02a456761c432e3c58b3a27c88f34cf7175"
+    },
+    {
+      "path": "frontend/admin-restored-read-routing.mjs",
+      "bytes": 9102,
+      "sha256": "314d3bfc7af405afa41aa516d61a437268c26776c03c65bffa7160390eb42e95"
+    },
+    {
+      "path": "frontend/safe-preview-diagnostics.mjs",
+      "bytes": 3629,
+      "sha256": "9e13c721c008c10807108054d1abbb72b1987870dd822bb0d9e534434a00e40f"
+    },
+    {
+      "path": "frontend/worker.js",
+      "bytes": 14296,
+      "sha256": "40b78eeb19b5ddcb16bc3618d670a3e30971c2ec0a275843145b559f49c52b5d"
+    },
+    {
+      "path": "public-delta/assets/index-B0-ww0NP.js",
+      "bytes": 413179,
+      "sha256": "e2b69011cd3a79d230fb75e28eb18c6198d3f281b6e86b95f960fe6c743db2e4"
+    },
+    {
+      "path": "public-delta/assets/index-Cisn8fL9.css",
+      "bytes": 17964,
+      "sha256": "f4fc6f8918f7bcc9beb6716834c0ddff2126f0a16596beb44ebbe51adb7f0cd0"
+    },
+    {
+      "path": "public-delta/index.html",
+      "bytes": 538,
+      "sha256": "099ceeb3fa2037f892826408e0ef8f2c8f0070597335ba2387d012e4120d7582"
+    },
+    {
+      "path": "wrangler.json",
+      "bytes": 626,
+      "sha256": "15371596227611240f931b4abe6592051f7e0828c11f85a58a450f7d2be26a58"
+    }
+  ]
+}
