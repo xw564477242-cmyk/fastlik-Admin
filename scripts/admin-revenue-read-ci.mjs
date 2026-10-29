@@ -122,6 +122,43 @@ export function safeSettings(value) {
     observability:value.observability??null,tailConsumers:value.tail_consumers??null,
     assetConfig:value.assets?.config??null}
 }
+export function preservedRuntimeConfig(base,settings) {
+  const config=structuredClone(base)
+  const obs=settings.observability
+  const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v)
+  const keys=(v,allowed)=>Object.keys(v).every(k=>allowed.includes(k))
+  const rate=v=>typeof v==='number'&&Number.isFinite(v)&&v>=0&&v<=1
+  if(!object(obs)||!keys(obs,['enabled','head_sampling_rate','logs','traces']))
+    throw new Stop('OBSERVABILITY_PRESERVATION_UNCONFIRMED')
+  if(Object.hasOwn(obs,'enabled')&&typeof obs.enabled!=='boolean') throw new Stop('OBSERVABILITY_PRESERVATION_UNCONFIRMED')
+  if(Object.hasOwn(obs,'head_sampling_rate')&&!rate(obs.head_sampling_rate)) throw new Stop('OBSERVABILITY_PRESERVATION_UNCONFIRMED')
+  if(!Object.hasOwn(obs,'enabled')&&!Object.hasOwn(obs,'logs')&&!Object.hasOwn(obs,'traces')) throw new Stop('OBSERVABILITY_PRESERVATION_UNCONFIRMED')
+  for(const kind of ['logs','traces']) if(Object.hasOwn(obs,kind)) {
+    const value=obs[kind]
+    const allowed=kind==='logs'?['enabled','head_sampling_rate','invocation_logs','persist','destinations']:['enabled','head_sampling_rate','persist','destinations']
+    if(!object(value)||!keys(value,allowed)) throw new Stop('OBSERVABILITY_PRESERVATION_UNCONFIRMED')
+    for(const key of ['enabled','invocation_logs','persist'])
+      if(Object.hasOwn(value,key)&&typeof value[key]!=='boolean') throw new Stop('OBSERVABILITY_PRESERVATION_UNCONFIRMED')
+    if(Object.hasOwn(value,'head_sampling_rate')&&!rate(value.head_sampling_rate)) throw new Stop('OBSERVABILITY_PRESERVATION_UNCONFIRMED')
+    if(Object.hasOwn(value,'destinations')&&(!Array.isArray(value.destinations)||value.destinations.some(v=>typeof v!=='string'||v.length>256)))
+      throw new Stop('OBSERVABILITY_PRESERVATION_UNCONFIRMED')
+  }
+  config.observability=structuredClone(obs)
+  if(settings.limits!==null&&settings.limits!==undefined) {
+    const value=settings.limits
+    if(!object(value)||!keys(value,['cpu_ms','subrequests'])||Object.values(value).some(v=>!Number.isSafeInteger(v)||v<0))
+      throw new Stop('LIMITS_PRESERVATION_UNCONFIRMED')
+    config.limits=structuredClone(value)
+  }
+  if(settings.placement!==null&&settings.placement!==undefined) {
+    const value=settings.placement
+    if(!object(value)||!keys(value,['mode','hint'])||!['off','smart'].includes(value.mode)||
+        (Object.hasOwn(value,'hint')&&(value.mode!=='smart'||typeof value.hint!=='string'||value.hint.length>256)))
+      throw new Stop('PLACEMENT_PRESERVATION_UNCONFIRMED')
+    config.placement=structuredClone(value)
+  }
+  return config
+}
 export async function metadata(env, fetchImpl) {
   const deployment=await api(env,'/deployments',fetchImpl)
   const current=deployment?.deployments?.[0]
@@ -137,15 +174,19 @@ export async function metadata(env, fetchImpl) {
   return {version:current.versions[0].version_id,createdOn:current.created_on,settings,
     domain:{enabled:domain.enabled,previewsEnabled:domain.previews_enabled}}
 }
-export async function publish(env) {
+export async function publish(env,before,effectiveConfig) {
   if(!path.isAbsolute(env.WRANGLER_BIN||'')||!path.isAbsolute(env.RUNNER_TEMP||'')) throw new Stop('PINNED_TOOL_UNAVAILABLE')
+  // A separate temporary configuration carries only validated non-secret inherited settings.
+  // The locally sealed input/config/manifest and all five modules remain untouched.
+  const effectiveBytes=JSON.stringify(effectiveConfig,null,2)+'\n'
+  await writeFile(path.join(packageRoot,'wrangler.inherited-settings.json'),effectiveBytes,{mode:0o600,flag:'wx'})
   const logDir=await mkdtemp(path.join(env.RUNNER_TEMP,'fl-b17-revenue-log-'))
   const logSink=path.join(logDir,'null.log'); await symlink('/dev/null',logSink)
   const childEnv={...env,CLOUDFLARE_ACCOUNT_ID:target.account,CI:'true',WRANGLER_SEND_METRICS:'false',
     WRANGLER_LOG_PATH:logSink,CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV:'false'}
   for(const name of ['HOSTED_ACCOUNT_ID','CLOUDFLARE_API_KEY','CLOUDFLARE_EMAIL','DEBUG']) delete childEnv[name]
   return new Promise((resolve,reject)=>{
-    const child=spawn(env.WRANGLER_BIN,['deploy','--config','wrangler.json','--keep-vars',
+    const child=spawn(env.WRANGLER_BIN,['deploy','--config','wrangler.inherited-settings.json','--keep-vars',
       '--autoconfig=false','--message','B17 revenue readonly snapshot '+target.sourceSnapshot+
       ' transport '+env.GITHUB_SHA],{cwd:packageRoot,env:childEnv,stdio:['ignore','pipe','pipe'],shell:false})
     let output=''
@@ -161,7 +202,8 @@ export async function publish(env) {
       if(exitCode!==0 || !reportedVersion) return reject(new Stop('WRANGLER_PUBLISH_UNCONFIRMED',{
         exitCode,signal,platformCodes,reportedVersion,platformMessage:'NOT_RECORDED_SAFELY'
       }))
-      resolve({version:reportedVersion,exitCode,platformCodes})
+      resolve({version:reportedVersion,exitCode,platformCodes,effectiveConfigSHA256:sha(effectiveBytes),
+        inheritedNonSecretFields:['observability',...(effectiveConfig.limits?['limits']:[]),...(effectiveConfig.placement?['placement']:[])]})
     })
   })
 }
@@ -176,7 +218,10 @@ export async function release(env,deps={}) {
     const payload=await (deps.verifyPayload||verifyPayload)()
     phase='BEFORE_METADATA';before=await (deps.metadata||metadata)(env,fetchImpl)
     if(!before.version.startsWith(target.previousVersionPrefix)) throw new Stop('ACTIVE_BASELINE_DRIFT')
-    phase='PUBLISH';publishResult=await (deps.publish||publish)(env)
+    phase='METADATA_PRESERVATION'
+    const baseConfig=await (deps.readBaseConfig||(()=>readFile(path.join(packageRoot,'wrangler.json'),'utf8').then(JSON.parse)))()
+    const effectiveConfig=preservedRuntimeConfig(baseConfig,before.settings)
+    phase='PUBLISH';publishResult=await (deps.publish||publish)(env,before,effectiveConfig)
     phase='AFTER_METADATA'
     const after=await (deps.metadata||metadata)(env,fetchImpl)
     if(after.version===before.version || after.version!==publishResult.version) throw new Stop('ACTIVE_VERSION_MISMATCH')

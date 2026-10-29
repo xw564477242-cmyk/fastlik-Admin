@@ -7,7 +7,7 @@ const env=()=>({GITHUB_ACTIONS:'true',GITHUB_REPOSITORY:target.repository,GITHUB
   HOSTED_ACCOUNT_ID:target.account,CLOUDFLARE_API_TOKEN:'offline-fixture-not-a-real-credential'})
 const next='11111111-2222-4333-8444-555555555555'
 const before='ed8d2086-2222-4333-8444-555555555555'
-const snapshot=()=>({version:before,createdOn:'2026-10-29T00:00:00Z',settings:{lease:{until:'unchanged'},bindings:[{name:'ASSETS',type:'assets'}]},domain:{enabled:true,previewsEnabled:false}})
+const snapshot=()=>({version:before,createdOn:'2026-10-29T00:00:00Z',settings:{lease:{until:'unchanged'},bindings:[{name:'ASSETS',type:'assets'}],observability:{enabled:true},limits:null,placement:null},domain:{enabled:true,previewsEnabled:false}})
 const deps=extra=>({skipSelfHash:true,verifyPayload:async()=>({manifestSHA256:target.manifestSHA256}),metadata:async()=>snapshot(),...extra})
 test('sealed dispatch context refuses another commit/workflow/ref/retry before metadata or publish',async()=>{
   for(const patch of [{SEALED_COMMIT:'b'.repeat(40)},{GITHUB_REF:'refs/heads/main'},
