@@ -50,7 +50,7 @@ jobs:
         run: npm install --prefix "$RUNNER_TEMP/fl-b17-wrangler" --no-save --ignore-scripts --no-audit --no-fund wrangler@4.114.0
       - name: Verify sealed input, bind metadata, publish exactly once
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEV_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_B17_ADMIN_PREVIEW_API_TOKEN }}
           HOSTED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEV_ACCOUNT_ID }}
           SEALED_COMMIT: ${{ inputs.approved_commit }}
           APPROVED_PUBLISHER_SHA: 0611f43b697b98cc110df052d39b0236060f6c839c4f16d8d28d3101c059781a
