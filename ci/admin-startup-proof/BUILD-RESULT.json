@@ -1,51 +1,51 @@
 {
   "status": "OFFLINE_BUILT_NOT_DEPLOYED",
-  "source": "/Users/ck/.codex/worktrees/35cc/fastlink-prime-wallet-dev-release/deliveries/FL-LAUNCH-B17-20261018/admin-default-readonly-fix-20261025/full-admin-completion-20261026/execution/combined-continuation-20261027/diagnosis-recovery/admin-inline-final/readiness-final/wallet-transaction-record-20261029/revenue-read-package/management-flow-20261030/source",
-  "dependencies": "/Users/ck/.codex/worktrees/35cc/fastlink-prime-wallet-dev-release/deliveries/FL-LAUNCH-B17-20261018/admin-default-readonly-fix-20261025/full-admin-completion-20261026/execution/combined-continuation-20261027/diagnosis-recovery/admin-inline-final/readiness-final/wallet-transaction-record-20261029/revenue-read-package/ci-delivery/auth-continuation/white-screen-fix/source/node_modules",
-  "inputPath": "/Users/ck/.codex/worktrees/35cc/fastlink-prime-wallet-dev-release/deliveries/FL-LAUNCH-B17-20261018/admin-default-readonly-fix-20261025/full-admin-completion-20261026/execution/combined-continuation-20261027/diagnosis-recovery/admin-inline-final/readiness-final/wallet-transaction-record-20261029/revenue-read-package/management-flow-20261030/PUBLIC-BUILD-INPUT.json",
-  "publicInputSHA256": "b03335fa38ed057eb747a138ef61cb78b52af587fc15b97ef2168ab692bb7bfb",
+  "source": "/Users/ck/.codex/worktrees/35cc/fastlink-prime-wallet-dev-release/deliveries/FL-LAUNCH-B17-20261018/admin-default-readonly-fix-20261025/full-admin-completion-20261026/execution/combined-continuation-20261027/diagnosis-recovery/admin-inline-final/readiness-final/wallet-transaction-record-20261029/revenue-read-package/management-flow-20261030/subsystem-map-20261031/source",
+  "dependencies": "/Users/ck/.codex/worktrees/35cc/fastlink-prime-wallet-dev-release/deliveries/FL-LAUNCH-B17-20261018/admin-default-readonly-fix-20261025/full-admin-completion-20261026/execution/combined-continuation-20261027/diagnosis-recovery/admin-inline-final/readiness-final/wallet-transaction-record-20261029/revenue-read-package/management-flow-20261030/subsystem-map-20261031/source/node_modules",
+  "inputPath": "/Users/ck/.codex/worktrees/35cc/fastlink-prime-wallet-dev-release/deliveries/FL-LAUNCH-B17-20261018/admin-default-readonly-fix-20261025/full-admin-completion-20261026/execution/combined-continuation-20261027/diagnosis-recovery/admin-inline-final/readiness-final/wallet-transaction-record-20261029/revenue-read-package/management-flow-20261030/subsystem-map-20261031/PUBLIC-BUILD-INPUT.json",
+  "publicInputSHA256": "74c7880436655919b12c6d00da36ba561f7c874de247ce8a215afd264247ab18",
   "publicInput": {
     "VITE_FASTLINK_ENVIRONMENT": "TEST",
     "VITE_FASTLINK_API_URL": "/api",
     "VITE_FASTLINK_BUILD_SHA": "bf72fcc33962576049ae077e80286a06b9f46fb5",
-    "VITE_FASTLINK_SOURCE_SNAPSHOT": "46a6780aaa35c94a5744b25ea9fa3d0b175a9dfe9a9d716fa9134b5b42e2ef34",
-    "VITE_FASTLINK_CANDIDATE_ID": "FL-LAUNCH-B17-20261030-management-flow",
+    "VITE_FASTLINK_SOURCE_SNAPSHOT": "70016446e46f9940f2f18f61637b0619ee27cb15e6148176edc7f8b7cf9496c9",
+    "VITE_FASTLINK_CANDIDATE_ID": "FL-LAUNCH-B17-20261031-subsystem-map",
     "VITE_FASTLINK_PREVIEW_MODE": "READ_ONLY"
   },
   "historicalBaseMeaning": "REUSED_HISTORICAL_UI_BASE_NOT_TRANSPORT_COMMIT",
-  "sourceSnapshotMeaning": "COMPLETE_UI_SNAPSHOT_WITH_THREE_SCOPED_READ_FLOW_FILES_CHANGED",
+  "sourceSnapshotMeaning": "PUBLISHED_18A_BASE_WITH_TWO_MAP_ONLY_FILES_CHANGED",
   "tools": {
     "node": "22.22.1",
     "vite": "8.1.6",
     "pluginReact": "6.0.4"
   },
   "publicAssets": {
-    "/assets/index-B8VtVPb5.js": {
-      "mime": "application/javascript; charset=utf-8",
-      "sha256": "219adc98a9d99a6950129ac87526d1ab35588621a9c1184ebbc29c38eb999524",
-      "bytes": 416395
-    },
     "/assets/index-Cisn8fL9.css": {
       "mime": "text/css; charset=utf-8",
       "sha256": "f4fc6f8918f7bcc9beb6716834c0ddff2126f0a16596beb44ebbe51adb7f0cd0",
       "bytes": 17964
     },
+    "/assets/index-DaspeEqR.js": {
+      "mime": "application/javascript; charset=utf-8",
+      "sha256": "f1fba1ee929226c69fca5f5d532b1be0b322e1944e8efb50d0f4f9dc04f26afd",
+      "bytes": 417475
+    },
     "/index.html": {
       "mime": "text/html; charset=utf-8",
-      "sha256": "ffd76650f848fe16ba2ffa7532849edd98295caaeeb00dc274a8ba3102941529",
+      "sha256": "e2458c073d2273b00e802eaf4c499be45d6fec34fb5070217ef1ecd51fdc2026",
       "bytes": 538
     }
   },
   "moduleFiles": [
     {
       "path": "admin-inline-public.mjs",
-      "bytes": 582307,
-      "sha256": "9c8fe75ddc81676a01d339778862cee05479314e13be9bf53f010a3ba01c5ebe"
+      "bytes": 583747,
+      "sha256": "f5c9255e093597da910a3f1325c6903ae59e38d00c13269c7fb0808837aa834f"
     },
     {
       "path": "admin-release-identity.mjs",
-      "bytes": 293,
-      "sha256": "b2166dff210f6973d2a5e2a4e99371415ee46b77d6139ffe28fc271defed9e57"
+      "bytes": 291,
+      "sha256": "458d905a247ba8648b0a09bf05d87614bfc82de251a6df6b2bd2adbae08fc3ce"
     },
     {
       "path": "admin-restored-read-routing.mjs",
@@ -69,9 +69,9 @@
   "backendCalls": 0,
   "publishCalls": 0,
   "configurationProbes": {
-    "config-probe.mjs": "c2631e5f1d2744008d061a7b1f19991f62b350ac65c396db47d853751d730ffe",
-    "negative-probes/missing-environment.mjs": "6c0532e46d2801a0bbf64d085cffa1311f1cb5ba052b3417297b481cfd3a960f",
-    "negative-probes/missing-api.mjs": "9dc66a183ce7b192f64e8ad902d8f12de1a8f6942fe015875008f5bc311a7f3a"
+    "config-probe.mjs": "fd37f6c3f31ae6dbb2eafc71d44c55189741602c540fe18c9fd2a70907878503",
+    "negative-probes/missing-environment.mjs": "d2c5b5bd924966153ab04c6a5911432bdb82e9b80717b87f385b7cf9dbf85557",
+    "negative-probes/missing-api.mjs": "1230d46c4ed89c685edd2762231b66ab97cba26cc7d068aafc10079f0aeb4101"
   },
   "scope": "Only required new-build public input guards and entry proof; no old business suites rerun"
 }
