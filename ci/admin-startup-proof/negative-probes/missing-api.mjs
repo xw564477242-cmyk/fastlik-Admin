@@ -1,4 +1,4 @@
-//#region ../auth-continuation/white-screen-fix/source/src/buildIdentity.ts
+//#region ../../management-flow-20261030/source/src/buildIdentity.ts
 function text(value, field) {
 	if (value === void 0 || value === null || value === "") return void 0;
 	if (typeof value !== "string") throw new Error("Invalid build identity field: " + field);
@@ -34,7 +34,7 @@ function resolveBuildIdentity(input) {
 	});
 }
 //#endregion
-//#region ../auth-continuation/white-screen-fix/source/src/runtimeConfig.ts
+//#region ../../management-flow-20261030/source/src/runtimeConfig.ts
 function required(name) {
 	const value = {
 		"BASE_URL": "/",
@@ -43,10 +43,10 @@ function required(name) {
 		"PROD": true,
 		"SSR": false,
 		"VITE_FASTLINK_BUILD_SHA": "bf72fcc33962576049ae077e80286a06b9f46fb5",
-		"VITE_FASTLINK_CANDIDATE_ID": "FL-LAUNCH-B17-20261030-revenue-read-startup-fix",
+		"VITE_FASTLINK_CANDIDATE_ID": "FL-LAUNCH-B17-20261030-management-flow",
 		"VITE_FASTLINK_ENVIRONMENT": "TEST",
 		"VITE_FASTLINK_PREVIEW_MODE": "READ_ONLY",
-		"VITE_FASTLINK_SOURCE_SNAPSHOT": "72e2068f3da57751c3e779ceb2315391df568777f9cdb9c6f712b471828aca33"
+		"VITE_FASTLINK_SOURCE_SNAPSHOT": "46a6780aaa35c94a5744b25ea9fa3d0b175a9dfe9a9d716fa9134b5b42e2ef34"
 	}[name];
 	if (typeof value !== "string" || value.trim() === "") throw new Error(`Missing required build variable: ${name}`);
 	return value.trim();
@@ -71,8 +71,8 @@ if ([
 var buildIdentity = resolveBuildIdentity({
 	buildSha: "bf72fcc33962576049ae077e80286a06b9f46fb5",
 	runtimeBuildSha: window.__FASTLINK_RUNTIME__?.buildSha,
-	candidateId: "FL-LAUNCH-B17-20261030-revenue-read-startup-fix",
-	sourceSnapshot: "72e2068f3da57751c3e779ceb2315391df568777f9cdb9c6f712b471828aca33"
+	candidateId: "FL-LAUNCH-B17-20261030-management-flow",
+	sourceSnapshot: "46a6780aaa35c94a5744b25ea9fa3d0b175a9dfe9a9d716fa9134b5b42e2ef34"
 });
 var runtimeConfig = Object.freeze({
 	environment,
