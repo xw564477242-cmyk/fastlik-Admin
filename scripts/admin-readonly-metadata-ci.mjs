@@ -4,7 +4,7 @@ import path from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {guard,target,Stop} from './admin-revenue-read-ci.mjs'
 const sha=b=>createHash('sha256').update(b).digest('hex')
-export const activeVersion='ed8d2086-4e8c-4dc4-838e-5b15c21619e2'
+export const activeVersion='2ceb48fd-786f-4862-8a5b-f5f6afd436b9'
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v)
 const string=v=>typeof v==='string'&&v.length<=256

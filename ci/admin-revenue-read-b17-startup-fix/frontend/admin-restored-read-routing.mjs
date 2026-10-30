@@ -1,0 +1,112 @@
+// Product wiring only. Business authentication, permissions, RLS and column ACL remain authoritative.
+const tenant = '/admin/tenants/b9_tenant_A_20261016';
+const objectId = '[A-Za-z0-9_-]{2,128}';
+const traceId = '[A-Za-z0-9._:-]{8,128}';
+const feeTypes = ['CARD_ISSUANCE', 'CARD_MONTHLY', 'USDT_DEPOSIT', 'CARD_SPEND', 'FX_CONVERSION', 'DIGITAL_ASSET_WITHDRAWAL', 'CASH_WITHDRAWAL', 'REFERRAL_SETTLEMENT', 'THIRD_PARTY_PAYMENT'];
+const reads = [
+    { path: new RegExp('^' + tenant + '$'), keys: [] },
+    { path: new RegExp('^' + tenant + '/management/(branding|capabilities)$'), keys: ['environment'], environment: true },
+    { path: new RegExp('^' + tenant + '/management/(products|roles)$'), keys: ['environment', 'limit', 'offset', 'search'], environment: true },
+    { path: new RegExp('^' + tenant + '/management/(products|roles)/' + objectId + '$'), keys: ['environment'], environment: true },
+    { path: new RegExp('^' + tenant + '/management/roles/' + objectId + '/(members|permissions)$'), keys: ['environment', 'limit', 'offset', 'search'], environment: true },
+    { path: new RegExp('^' + tenant + '/management/audit$'), keys: ['environment', 'limit', 'offset', 'resource', 'action', 'requestId'], environment: true },
+    { path: new RegExp('^' + tenant + '/management/audit/' + objectId + '$'), keys: ['environment'], environment: true },
+    { path: new RegExp('^' + tenant + '/ledger/(accounts|journals|trial-balance)$'), keys: ['environment'], environment: true },
+    { path: new RegExp('^' + tenant + '/settlement/(liquidity|reconciliation|trial-balance|daily-closing)$'), keys: ['environment'], environment: true },
+    { path: new RegExp('^' + tenant + '/wallet/transactions$'), keys: ['environment', 'type', 'status', 'assetCode', 'limit', 'offset'], environment: true },
+    { path: new RegExp('^' + tenant + '/wallet/operations$'), keys: ['environment', 'status', 'type', 'assetCode', 'limit', 'offset'], environment: true },
+    { path: new RegExp('^' + tenant + '/wallet/operations/' + objectId + '$'), keys: ['environment'], environment: true },
+    { path: new RegExp('^' + tenant + '/wallet/accounts/' + objectId + '/history$'), keys: ['environment', 'status', 'type', 'assetCode', 'limit', 'offset'], environment: true },
+    { path: new RegExp('^' + tenant + '/wallet/asset-summary$'), keys: ['environment', 'customerId'], environment: true },
+    { path: new RegExp('^' + tenant + '/dashboards/(treasury|settlement|risk)$'), keys: ['environment', 'highValueThresholdMinor'], environment: true },
+    { path: new RegExp('^' + tenant + '/integrations/readiness$'), keys: [] },
+    { path: new RegExp('^' + tenant + '/(card-products|fee-policy)$'), keys: [] },
+    { path: new RegExp('^' + tenant + '/customers/' + objectId + '/referral$'), keys: ['environment'], environment: true },
+    { path: new RegExp('^' + tenant + '/fee-assessments$'), keys: ['environment', 'feeType', 'assetCode', 'from', 'to', 'limit', 'offset'], environment: true },
+    { path: new RegExp('^' + tenant + '/api-clients$'), keys: ['limit', 'offset', 'search'] },
+    { path: new RegExp('^' + tenant + '/api-clients/' + objectId + '$'), keys: [] },
+    { path: new RegExp('^' + tenant + '/events$'), keys: ['environment', 'limit', 'offset', 'search'], environment: true },
+    { path: new RegExp('^' + tenant + '/events/' + objectId + '$'), keys: ['environment'], environment: true },
+    { path: new RegExp('^' + tenant + '/merchants$'), keys: ['environment', 'limit', 'offset', 'search', 'status'], environment: true },
+    { path: new RegExp('^' + tenant + '/merchants/' + objectId + '$'), keys: ['environment'], environment: true },
+    { path: new RegExp('^' + tenant + '/merchant/payments$'), keys: ['environment', 'limit', 'offset', 'merchantId', 'status', 'assetCode', 'from', 'to'], environment: true },
+    { path: new RegExp('^' + tenant + '/merchant/payments/' + objectId + '$'), keys: ['environment'], environment: true },
+    { path: new RegExp('^' + tenant + '/evidence$'), keys: ['environment', 'limit', 'offset', 'category', 'result', 'operation', 'traceId'], environment: true },
+    { path: new RegExp('^' + tenant + '/evidence/summary$'), keys: ['environment'], environment: true },
+    { path: new RegExp('^' + tenant + '/evidence/' + objectId + '$'), keys: ['environment'], environment: true },
+    { path: new RegExp('^' + tenant + '/operations/mock-contamination$'), keys: ['environment'], environment: true },
+    { path: new RegExp('^' + tenant + '/support-cases$'), keys: ['traceId'] },
+    { path: new RegExp('^' + tenant + '/support-cases/' + objectId + '$'), keys: [] },
+    { path: new RegExp('^' + tenant + '/operations/card-support/' + traceId + '$'), keys: [] },
+    { path: new RegExp('^' + tenant + '/users$'), keys: ['environment', 'limit', 'offset', 'search', 'kycStatus'], environment: true },
+    { path: new RegExp('^' + tenant + '/users/' + objectId + '(?:/kyc)?$'), keys: ['environment'], environment: true },
+    { path: new RegExp('^' + tenant + '/cards/' + objectId + '/snapshot(?:/(?:balance|limits))?$'), keys: [] },
+    { path: new RegExp('^' + tenant + '/cards/' + objectId + '/timeline$'), keys: ['limit', 'cursor'] },
+    { path: new RegExp('^' + tenant + '/cards/' + objectId + '/transactions$'), keys: ['limit', 'cursor', 'status', 'type', 'currency', 'from', 'to'] },
+    { path: new RegExp('^' + tenant + '/cards/' + objectId + '/transactions/' + objectId + '$'), keys: [] },
+    { path: new RegExp('^' + tenant + '/operations/traces/' + traceId + '$'), keys: ['environment'], environment: true },
+    { path: new RegExp('^' + tenant + '/treasury/funds-instructions/' + objectId + '$'), keys: ['environment'], environment: true },
+];
+export function restoredAdminReadAllowed(target, method = 'GET') {
+    if (method !== 'GET' || typeof target !== 'string' || target.length > 4096 || !/^[\x21-\x7e]+$/.test(target))
+        return false;
+    const [path, query, extra] = target.split('?');
+    if (extra !== undefined || /[%\\;#]/.test(path) || path.includes('//') || /\/(?:\.|\.\.)(?:\/|$)/.test(path))
+        return false;
+    const route = reads.find(r => r.path.test(path));
+    if (!route)
+        return false;
+    const isFee = path === tenant + '/fee-assessments';
+    const seen = new Set();
+    for (const [key, value] of new URLSearchParams(query ?? '')) {
+        if (!route.keys.includes(key) || seen.has(key) || !value)
+            return false;
+        seen.add(key);
+        if (key === 'environment' && value !== 'TEST')
+            return false;
+        if (isFee && key === 'feeType' && !feeTypes.includes(value))
+            return false;
+        if (isFee && key === 'limit' && (!/^[1-9][0-9]?$/.test(value) || Number(value) > 50))
+            return false;
+        if (isFee && key === 'offset' && (!/^(?:0|[1-9][0-9]{0,5})$/.test(value) || Number(value) > 100000))
+            return false;
+        if (isFee && ['from', 'to'].includes(key) && (!Number.isFinite(Date.parse(value)) || new Date(value).toISOString() !== value))
+            return false;
+        if (key === 'limit' && !/^(?:[1-9][0-9]?|100)$/.test(value))
+            return false;
+        if (key === 'offset' && !/^(?:0|[1-9][0-9]{0,8})$/.test(value))
+            return false;
+        if (key === 'assetCode' && !/^[A-Z0-9]{2,12}$/.test(value))
+            return false;
+        if ((key === 'type' || key === 'status') && !/^[A-Z][A-Z_]{1,39}$/.test(value))
+            return false;
+        if (key === 'kycStatus' && !['PENDING', 'APPROVED', 'REJECTED'].includes(value))
+            return false;
+        if ((key === 'customerId' || key === 'merchantId') && !/^[A-Za-z0-9_-]{2,100}$/.test(value))
+            return false;
+        if (['resource', 'action', 'requestId'].includes(key) && (value.length > 100 || [...value].some(c => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)))
+            return false;
+        if (key === 'search' && (value.length > 100 || [...value].some(c => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)))
+            return false;
+        if ((key === 'category' || key === 'result') && !/^[A-Z][A-Z_]{1,39}$/.test(value))
+            return false;
+        if (key === 'operation' && !/^[A-Za-z0-9._:-]{1,100}$/.test(value))
+            return false;
+        if (key === 'traceId' && !/^[A-Za-z0-9._:-]{8,128}$/.test(value))
+            return false;
+        if ((key === 'from' || key === 'to') && (!/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z)?$/.test(value) || !Number.isFinite(Date.parse(value))))
+            return false;
+        if (key === 'highValueThresholdMinor' && (!/^[1-9][0-9]{0,9}$/.test(value) || BigInt(value) > 1000000000n))
+            return false;
+        if (key === 'currency' && !/^[A-Z]{3}$/.test(value))
+            return false;
+        if (key === 'cursor' && !/^[A-Za-z0-9._-]{1,2048}$/.test(value))
+            return false;
+    }
+    if (isFee) {
+        const q = new URLSearchParams(query ?? '');
+        if (q.has('from') && q.has('to') && q.get('from') > q.get('to'))
+            return false;
+    }
+    return !route.environment || seen.has('environment');
+}

@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {createHash} from 'node:crypto'
 import {readFile} from 'node:fs/promises'
-import {releaseNative,multipart,versionMetadata} from './admin-native-version-ci.mjs'
+import {releaseNative,multipart,versionMetadata,deploymentResponseContract} from './admin-native-version-ci.mjs'
 import {verifyPayload,target} from './admin-revenue-read-ci.mjs'
 import {activeVersion,projectVersion} from './admin-readonly-metadata-ci.mjs'
 const next='11111111-2222-4333-8444-555555555555'
@@ -36,7 +36,7 @@ function harness(options={}){
   }else if(request.method==='POST'&&suffix==='/deployments'){
    const body=JSON.parse(request.body)
    assert.deepEqual(body.versions,[{version_id:next,percentage:100}])
-   active=next;result={id:deploymentId,versions:body.versions}
+   active=next;result=Object.hasOwn(options,'deploymentResponse')?options.deploymentResponse:{id:deploymentId,versions:body.versions}
   }else if(suffix==='/deployments')result={deployments:[{versions:[{version_id:active,percentage:100}]}]}
   else if(suffix==='/settings')result={bindings:bindings(),compatibility_date:'2026-07-25',
    compatibility_flags:['nodejs_compat'],usage_model:'standard',limits:null,placement:{},
@@ -86,6 +86,29 @@ test('unknown upload UUID and changed staged runtime never cut over',async()=>{
   const h=harness(opts),r=await releaseNative(env(),h.deps)
   assert.equal(r.status,'STOP');assert.equal(r.counts.upload,1);assert.equal(r.counts.deploy,0)
  }
+})
+test('response contract differences stay LIMITED/MISMATCH; actual independent state and full settings decide publication',async()=>{
+ for(const [value,status] of [[{},'RESPONSE_CONTRACT_LIMITED'],
+   [{id:'opaque-not-a-UUID',versions:[{version_id:next,percentage:100}]},'RESPONSE_CONTRACT_MISMATCH'],
+   [{id:deploymentId,versions:[]},'RESPONSE_CONTRACT_LIMITED'],[null,'RESPONSE_CONTRACT_MISMATCH']]){
+  const h=harness({deploymentResponse:value}),r=await releaseNative(env(),h.deps)
+  assert.equal(r.status,'PUBLISHED_METADATA_CONFIRMED');assert.equal(r.responseContract.status,status)
+  assert.equal(r.deploymentConfirmation.version,next);assert.equal(r.metadataComparison,'EQUAL')
+  assert.equal(r.counts.upload,1);assert.equal(r.counts.deploy,1)
+  assert(!JSON.stringify(r).includes('opaque-not-a-UUID'))
+ }
+ assert.equal(deploymentResponseContract({id:deploymentId,versions:[{version_id:next,percentage:100}]},next).status,'RESPONSE_CONTRACT_PASS')
+})
+test('explicit deployment echo conflict or independent state mismatch never becomes success',async()=>{
+ for(const value of [{id:deploymentId,versions:[{version_id:activeVersion,percentage:100}]},
+  {id:deploymentId,versions:[{version_id:next,percentage:50}]}]){
+  const h=harness({deploymentResponse:value}),r=await releaseNative(env(),h.deps)
+  assert.equal(r.reason,'DEPLOYMENT_RESPONSE_CONFLICT');assert.equal(r.counts.deploy,1)
+ }
+ const h=harness({mutate:({result,suffix,request,active})=>{
+  if(suffix==='/deployments'&&request.method==='GET'&&active===next)result.deployments[0].versions[0].version_id=activeVersion
+ }}),r=await releaseNative(env(),h.deps)
+ assert.equal(r.reason,'NEW_VERSION_NOT_100_PERCENT');assert.equal(r.counts.deploy,1);assert.equal(h.calls.length,16)
 })
 test('HTTP refusal is not retried; unknown deployment commit only reads back and remains STOP',async()=>{
  const a=harness({refuseAt:7}),ar=await releaseNative(env(),a.deps)

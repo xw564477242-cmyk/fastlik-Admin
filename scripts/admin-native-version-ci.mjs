@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url'
 import {isDeepStrictEqual} from 'node:util'
 import {guard,target,Stop,verifyPayload,safeSettings} from './admin-revenue-read-ci.mjs'
 import {activeVersion,projectVersion,projectLatest,projectScriptSettings} from './admin-readonly-metadata-ci.mjs'
-const root=path.resolve('ci/admin-revenue-read-b17')
+const root=path.resolve('ci/admin-revenue-read-b17-startup-fix')
 const sha=b=>createHash('sha256').update(b).digest('hex')
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const equal=isDeepStrictEqual
@@ -15,7 +15,28 @@ export function deployment(value) {
   if(!current||!Array.isArray(current.versions)||current.versions.length!==1||
     current.versions[0].percentage!==100||!uuid.test(current.versions[0].version_id||''))
     throw new Stop('ACTIVE_DEPLOYMENT_AMBIGUOUS')
-  return {version:current.versions[0].version_id,percentage:100}
+  return {version:current.versions[0].version_id,percentage:100,
+    deploymentId:typeof current.id==='string'&&uuid.test(current.id)?current.id:null}
+}
+export function deploymentResponseContract(value,expected) {
+ const object=value!==null&&typeof value==='object'&&!Array.isArray(value)
+ const idPresent=object&&Object.hasOwn(value,'id'),idType=idPresent?typeof value.id:'missing'
+ const validId=idType==='string'&&uuid.test(value.id)
+ const versionsPresent=object&&Object.hasOwn(value,'versions')
+ const array=versionsPresent&&Array.isArray(value.versions)
+ const wellTyped=array&&value.versions.every(v=>v&&typeof v==='object'&&!Array.isArray(v)&&
+   typeof v.version_id==='string'&&uuid.test(v.version_id)&&typeof v.percentage==='number'&&
+   Number.isFinite(v.percentage)&&v.percentage>=0&&v.percentage<=100)
+ const exact=wellTyped&&value.versions.length===1&&value.versions[0].version_id===expected&&value.versions[0].percentage===100
+ // An explicit different version/percentage is a conflict; missing/invalid echo is not proof of state.
+ const explicitConflict=array&&value.versions.some(v=>v&&typeof v==='object'&&
+   ((typeof v.version_id==='string'&&uuid.test(v.version_id)&&v.version_id!==expected)||
+    (v.version_id===expected&&typeof v.percentage==='number'&&v.percentage!==100)))
+ return {status:validId&&exact?'RESPONSE_CONTRACT_PASS':
+   !object||(idPresent&&!validId)||(versionsPresent&&!wellTyped)?'RESPONSE_CONTRACT_MISMATCH':'RESPONSE_CONTRACT_LIMITED',
+  id:{present:idPresent,type:idType,uuidFormat:validId},
+  versions:{present:versionsPresent,array,wellTyped,echoMatchesNewVersion100:exact},
+  publicDeploymentId:validId?value.id:null,explicitConflict}
 }
 export function versionMetadata(value,expected) {
   const projected=projectVersion(value,expected)
@@ -65,7 +86,7 @@ export async function multipart(payload,read=readFile) {
 export async function releaseNative(env,deps={}) {
   let phase='CONTEXT',uploadedVersion=null,uploadMayHaveStarted=false,deployMayHaveStarted=false
   const counts={get:0,upload:0,deploy:0}
-  let before,after,payload,moduleSHA256
+  let before,after,payload,moduleSHA256,responseContract,deploymentConfirmation
   const fetchImpl=deps.fetchImpl||fetch
   const api=async(suffix,method='GET',body)=>{
     if(method==='POST'){
@@ -125,9 +146,11 @@ export async function releaseNative(env,deps={}) {
     const switched=await api('/deployments','POST',JSON.stringify({strategy:'percentage',
       versions:[{version_id:uploadedVersion,percentage:100}],
       annotations:{'workers/message':'B17 revenue snapshot '+target.sourceSnapshot+' transport '+env.GITHUB_SHA}}))
-    if(!uuid.test(switched?.id||'')||!Array.isArray(switched.versions)||switched.versions.length!==1||
-      switched.versions[0].version_id!==uploadedVersion||switched.versions[0].percentage!==100)
-      throw new Stop('DEPLOYMENT_RESPONSE_UNCONFIRMED')
+    responseContract=deploymentResponseContract(switched,uploadedVersion)
+    if(responseContract.explicitConflict)throw new Stop('DEPLOYMENT_RESPONSE_CONFLICT')
+    phase='INDEPENDENT_CUTOVER_CONFIRMATION'
+    deploymentConfirmation=deployment(await api('/deployments'))
+    if(deploymentConfirmation.version!==uploadedVersion)throw new Stop('NEW_VERSION_NOT_100_PERCENT')
     phase='AFTER_METADATA';after=await snapshot(uploadedVersion)
     if(after.latest.firstReturnedVersionId!==uploadedVersion||
       !equal(before.settings,after.settings)||!equal(before.scriptSettings,after.scriptSettings)||
@@ -135,18 +158,21 @@ export async function releaseNative(env,deps={}) {
       throw new Stop('POST_DEPLOYMENT_METADATA_DRIFT')
     return {status:'PUBLISHED_METADATA_CONFIRMED',phase,account:target.account,worker:target.worker,
       transportCommit:env.GITHUB_SHA,sourceSnapshot:target.sourceSnapshot,payload,moduleSHA256,
-      before,after,publishResult:{version:uploadedVersion,deploymentId:switched.id},counts,
+      before,after,responseContract,deploymentConfirmation,
+      publishResult:{version:uploadedVersion,deploymentId:deploymentConfirmation.deploymentId||responseContract.publicDeploymentId},counts,
       metadataComparison:'EQUAL',secretValuesCompared:'NOT_READ_OR_COMPARED',browserAcceptance:'NOT_VERIFIED_BY_CI'}
   }catch(e){
     const error=e instanceof Stop?e:new Stop('UNEXPECTED_SAFE_STOP')
     let independentReadback
-    if(uploadMayHaveStarted||deployMayHaveStarted){
+    if(phase==='INDEPENDENT_CUTOVER_CONFIRMATION'){
+      independentReadback=deploymentConfirmation||{status:'UNCONFIRMED'}
+    }else if(uploadMayHaveStarted||deployMayHaveStarted){
       try{independentReadback=deployment(await api('/deployments'))}
       catch{independentReadback={status:'UNCONFIRMED'}}
     }
     return {status:'STOP',phase,reason:error.code,details:error.details,account:target.account,
       worker:target.worker,transportCommit:env.GITHUB_SHA,sourceSnapshot:target.sourceSnapshot,
-      before,after,uploadedVersion,uploadMayHaveStarted,deployMayHaveStarted,independentReadback,counts,
+      before,after,uploadedVersion,responseContract,deploymentConfirmation,uploadMayHaveStarted,deployMayHaveStarted,independentReadback,counts,
       automaticRetry:false,automaticRollback:false,versionDeletion:false}
   }
 }

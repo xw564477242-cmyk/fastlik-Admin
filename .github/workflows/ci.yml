@@ -51,14 +51,14 @@ jobs:
         with:
           node-version: 22
       - name: Only native version publication tests
-        run: node --test scripts/admin-native-version-ci.test.mjs
+        run: node --experimental-vm-modules --test scripts/admin-native-version-ci.test.mjs scripts/admin-startup-fix.test.mjs
       - name: Verify sealed input and native version upload then exact cutover
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_B17_ADMIN_PREVIEW_API_TOKEN }}
           HOSTED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEV_ACCOUNT_ID }}
           SEALED_COMMIT: ${{ inputs.approved_commit }}
           NATIVE_VERSION_PUBLISH: 'true'
-          APPROVED_NATIVE_PUBLISHER_SHA: 50b0c40810fb18d759356a491951f0f0c0a07fd548199b1a28febd2701bcf258
+          APPROVED_NATIVE_PUBLISHER_SHA: ad6cf2fddc85a789feba57728f0d301b20268f840f59ffff5968276d5c80a6b0
           PREVIEW_RESULT_FILE: ${{ runner.temp }}/fl-b17-revenue-preview-result.json
         run: node scripts/admin-native-version-ci.mjs
       - name: Only the non-secret release receipt
@@ -95,7 +95,7 @@ jobs:
           HOSTED_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEV_ACCOUNT_ID }}
           SEALED_COMMIT: ${{ inputs.approved_commit }}
           READONLY_METADATA_ONLY: 'true'
-          APPROVED_READER_SHA: 61fb8c62af2bacf0abb33ce4d8b24ba434b778f7cacbaf7e7acac2e3fbfc3aab
+          APPROVED_READER_SHA: 3180a7d9973ff7c70c294a6b9ee2c8667476ba35d8ec0cc872e9d0e48faf2a79
           READONLY_RESULT_FILE: ${{ runner.temp }}/fl-b17-admin-metadata-readonly.json
         run: node scripts/admin-readonly-metadata-ci.mjs
       - name: Only safe metadata projection receipt

@@ -1,0 +1,40 @@
+{
+  "publicInput": {
+    "VITE_FASTLINK_ENVIRONMENT": "TEST",
+    "VITE_FASTLINK_API_URL": "/api",
+    "VITE_FASTLINK_BUILD_SHA": "bf72fcc33962576049ae077e80286a06b9f46fb5",
+    "VITE_FASTLINK_SOURCE_SNAPSHOT": "72e2068f3da57751c3e779ceb2315391df568777f9cdb9c6f712b471828aca33",
+    "VITE_FASTLINK_CANDIDATE_ID": "FL-LAUNCH-B17-20261030-revenue-read-startup-fix",
+    "VITE_FASTLINK_PREVIEW_MODE": "READ_ONLY"
+  },
+  "publicInputSHA256": "175b8c3aa4500feb555df0784c5ed66fa4bfc296603d027169fd5c7213a681b6",
+  "tools": {
+    "node": "22.22.1",
+    "vite": "8.1.6",
+    "pluginReact": "6.0.4"
+  },
+  "publicAssets": {
+    "/assets/index-BNFhDahQ.js": {
+      "mime": "application/javascript; charset=utf-8",
+      "sha256": "508086dc46c235e46b5f1bd4c4cf1e332b744fe1438a02fdd9c52abaeef87487",
+      "bytes": 413660
+    },
+    "/assets/index-Cisn8fL9.css": {
+      "mime": "text/css; charset=utf-8",
+      "sha256": "f4fc6f8918f7bcc9beb6716834c0ddff2126f0a16596beb44ebbe51adb7f0cd0",
+      "bytes": 17964
+    },
+    "/index.html": {
+      "mime": "text/html; charset=utf-8",
+      "sha256": "7a094a293baded996a8a777335f226671aee7f2a52451cf6d9d3084e75701749",
+      "bytes": 538
+    }
+  },
+  "sourceSnapshotMeaning": "UNCHANGED_65_FILE_UI_SOURCE_SNAPSHOT_BUILD_INPUT_BOUND_SEPARATELY",
+  "builderSHA256": "7fc6bcee130d9ba67fb1671513417b86341c01a658a78c178fce93d57f2d781e",
+  "configurationProbes": {
+    "config-probe.mjs": "c054ef544a68829a8142942dc378eb4bc6f6ab04d27b5c6b7330edb1efb7c641",
+    "negative-probes/missing-environment.mjs": "93e56ce7407c20a5fcf7d0f03d91acc616213f62375d465626c66b27389f575f",
+    "negative-probes/missing-api.mjs": "02fac578f9ac1c1235a744e8f6496ea22a1da3e01026e122505067f82f71c725"
+  }
+}

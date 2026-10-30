@@ -1,0 +1,1 @@
+export const adminReleaseIdentity = Object.freeze({"buildSha":"bf72fcc33962576049ae077e80286a06b9f46fb5","baseHeadKind":"HISTORICAL_BASE_NOT_CANDIDATE_COMMIT","snapshot":"72e2068f3da57751c3e779ceb2315391df568777f9cdb9c6f712b471828aca33","candidate":"FL-LAUNCH-B17-20261030-revenue-read-startup-fix"});
