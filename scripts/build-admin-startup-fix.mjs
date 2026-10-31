@@ -9,9 +9,9 @@ export const publicKeys=['VITE_FASTLINK_API_URL','VITE_FASTLINK_BUILD_SHA','VITE
 export function publicDefines(input) {
  if(JSON.stringify(Object.keys(input).sort())!==JSON.stringify(publicKeys)||
    input.VITE_FASTLINK_ENVIRONMENT!=='TEST'||input.VITE_FASTLINK_API_URL!=='/api'||
-   input.VITE_FASTLINK_PREVIEW_MODE!=='READ_ONLY'||!/^bf72fcc33962576049ae077e80286a06b9f46fb5$/.test(input.VITE_FASTLINK_BUILD_SHA)||
+   input.VITE_FASTLINK_PREVIEW_MODE!=='READ_ONLY'||!/^3542b9c65f4fbdab1a979538dd1313c7cdc80f9c$/.test(input.VITE_FASTLINK_BUILD_SHA)||
    !/^[0-9a-f]{64}$/.test(input.VITE_FASTLINK_SOURCE_SNAPSHOT)||
-   input.VITE_FASTLINK_CANDIDATE_ID!=='FL-LAUNCH-B17-20261031-subsystem-map')
+   input.VITE_FASTLINK_CANDIDATE_ID!=='FL-LAUNCH-B17-20261031-management-continuation')
   throw Error('EXACT_PUBLIC_BUILD_INPUT_REQUIRED')
  // Vite 8 collects these per-property entries into its dynamic import.meta.env map.
  // A whole import.meta.env define is overwritten by Vite's own fallback generator.

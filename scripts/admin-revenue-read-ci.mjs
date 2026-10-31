@@ -9,16 +9,16 @@ export const target = Object.freeze({
   repository:'xw564477242-cmyk/fastlik-Admin',
   ref:'refs/heads/codex/fl-b17-revenue-read-ci-20261029',
   account:'af8ac20dee08abe5ec98a892ae83873e', worker:'fastlink-admin-preview-b13',
-  previousVersionPrefix:'18a0a4ae-',
-  manifestSHA256:'e1ee927e0f3984234ab28f3501fe4ccc76e4948f874e3ca20b30715f6ff13685',
-  sourceSnapshot:'70016446e46f9940f2f18f61637b0619ee27cb15e6148176edc7f8b7cf9496c9',
-  originalArchiveSHA256:'c51b34f44e2025e14a122e867082934e4841c20333c87f6e3ed667ae80afafda',
+  previousVersionPrefix:'5b84285e-',
+  manifestSHA256:'e5dbe36d094a99307568f71f80dc5bad9070c50163360cdc96b1e8ff4713d909',
+  sourceSnapshot:'1fb8281dcc52e1e5319547bd282a2cdba238c0d77fcd361dd996a1e1d8253abd',
+  originalArchiveSHA256:'4264d790242cc037642fc5fcdae2b8b25f1a6e3d0454b13c0320e25297848fc5',
 })
 const packageRoot = path.resolve('ci/admin-revenue-read-b17-startup-fix')
 const sha = bytes => createHash('sha256').update(bytes).digest('hex')
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const moduleNames = ['admin-inline-public.mjs','admin-release-identity.mjs','admin-restored-read-routing.mjs','safe-preview-diagnostics.mjs','worker.js']
-const publicNames = ['assets/index-DaspeEqR.js','assets/index-Cisn8fL9.css','index.html']
+const publicNames = ['assets/index-DAP7vzC9.js','assets/index-Cisn8fL9.css','index.html']
 const retainedTypes = ['plain_text','json','secret_text','secret_key','assets']
 const leaseNames = new Set(['FASTLINK_PREVIEW_DEPLOYMENT_PROFILE','B17_WINDOW_PHASE',
   'B17_RETENTION_UNTIL_UTC','B17_WINDOW_OPEN_UTC','B17_WINDOW_CLOSE_UTC',

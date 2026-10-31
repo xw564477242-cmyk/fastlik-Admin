@@ -1,4 +1,4 @@
-//#region ../../management-flow-20261030/subsystem-map-20261031/source/src/buildIdentity.ts
+//#region deliveries/admin-management-continuation-20261031/source/src/buildIdentity.ts
 function text(value, field) {
 	if (value === void 0 || value === null || value === "") return void 0;
 	if (typeof value !== "string") throw new Error("Invalid build identity field: " + field);
@@ -34,7 +34,7 @@ function resolveBuildIdentity(input) {
 	});
 }
 //#endregion
-//#region ../../management-flow-20261030/subsystem-map-20261031/source/src/runtimeConfig.ts
+//#region deliveries/admin-management-continuation-20261031/source/src/runtimeConfig.ts
 function required(name) {
 	const value = {
 		"BASE_URL": "/",
@@ -43,11 +43,11 @@ function required(name) {
 		"PROD": true,
 		"SSR": false,
 		"VITE_FASTLINK_API_URL": "/api",
-		"VITE_FASTLINK_BUILD_SHA": "bf72fcc33962576049ae077e80286a06b9f46fb5",
-		"VITE_FASTLINK_CANDIDATE_ID": "FL-LAUNCH-B17-20261031-subsystem-map",
+		"VITE_FASTLINK_BUILD_SHA": "3542b9c65f4fbdab1a979538dd1313c7cdc80f9c",
+		"VITE_FASTLINK_CANDIDATE_ID": "FL-LAUNCH-B17-20261031-management-continuation",
 		"VITE_FASTLINK_ENVIRONMENT": "TEST",
 		"VITE_FASTLINK_PREVIEW_MODE": "READ_ONLY",
-		"VITE_FASTLINK_SOURCE_SNAPSHOT": "70016446e46f9940f2f18f61637b0619ee27cb15e6148176edc7f8b7cf9496c9"
+		"VITE_FASTLINK_SOURCE_SNAPSHOT": "1fb8281dcc52e1e5319547bd282a2cdba238c0d77fcd361dd996a1e1d8253abd"
 	}[name];
 	if (typeof value !== "string" || value.trim() === "") throw new Error(`Missing required build variable: ${name}`);
 	return value.trim();
@@ -70,10 +70,10 @@ if ([
 	"PRODUCTION"
 ].includes(environment) && apiUrl !== "/api") throw new Error(`${environment} Cloudflare Admin must use same-origin /api`);
 var buildIdentity = resolveBuildIdentity({
-	buildSha: "bf72fcc33962576049ae077e80286a06b9f46fb5",
+	buildSha: "3542b9c65f4fbdab1a979538dd1313c7cdc80f9c",
 	runtimeBuildSha: window.__FASTLINK_RUNTIME__?.buildSha,
-	candidateId: "FL-LAUNCH-B17-20261031-subsystem-map",
-	sourceSnapshot: "70016446e46f9940f2f18f61637b0619ee27cb15e6148176edc7f8b7cf9496c9"
+	candidateId: "FL-LAUNCH-B17-20261031-management-continuation",
+	sourceSnapshot: "1fb8281dcc52e1e5319547bd282a2cdba238c0d77fcd361dd996a1e1d8253abd"
 });
 var runtimeConfig = Object.freeze({
 	environment,
