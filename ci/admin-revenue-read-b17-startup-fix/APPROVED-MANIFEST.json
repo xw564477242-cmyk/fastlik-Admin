@@ -1,10 +1,10 @@
 {
-  "format": "B17_SUBSYSTEM_MAP_FIXED_INPUT_V1",
-  "historicalBase": "bf72fcc33962576049ae077e80286a06b9f46fb5",
-  "sourceSnapshot": "1fb8281dcc52e1e5319547bd282a2cdba238c0d77fcd361dd996a1e1d8253abd",
-  "sourceSnapshotMeaning": "PUBLISHED_18A_COMPLETE_UI_WITH_TWO_MAP_ONLY_FILES_CHANGED",
-  "publicBuildInputSHA256": "74c7880436655919b12c6d00da36ba561f7c874de247ce8a215afd264247ab18",
-  "candidateId": "FL-LAUNCH-B17-20261031-subsystem-map",
+  "format": "B17_ADMIN_D78_FIXED_INPUT_V1",
+  "historicalBase": "3542b9c65f4fbdab1a979538dd1313c7cdc80f9c",
+  "sourceSnapshot": "d78cdcdb7776bd91841d7eb5b981f9f6ca4bb50c2c638e3f2f0f8ca79a041ebc",
+  "sourceSnapshotMeaning": "EXISTING_APPROVED_D78_BUILD_REUSED_WITHOUT_REBUILD",
+  "publicBuildInputSHA256": "dfa29d8d9c921c7b0729843d61c360399eea3b5d5483dc265594e97613130a29",
+  "candidateId": "FL-LAUNCH-B17-20261031-account-operation-followup",
   "originalFiveModuleArchiveSHA256": "4264d790242cc037642fc5fcdae2b8b25f1a6e3d0454b13c0320e25297848fc5",
   "archiveMeaning": "HISTORICAL_ORIGINAL_ARCHIVE_RETAINED_UNCHANGED_NOT_CURRENT_UPLOAD",
   "modules": [
@@ -20,24 +20,24 @@
       "url": "/assets/index-Cisn8fL9.css",
       "bytes": 17964,
       "sha256": "f4fc6f8918f7bcc9beb6716834c0ddff2126f0a16596beb44ebbe51adb7f0cd0",
-      "delivery": "IDENTICAL_BYTES_EMBEDDED_IN_ADMIN_INLINE_PUBLIC; NO_SEPARATE_ASSETS_UPLOAD"
+      "delivery": "IDENTICAL_EXISTING_D78_BYTES_EMBEDDED_IN_ADMIN_INLINE_PUBLIC; NO_SEPARATE_ASSETS_UPLOAD"
     },
     {
-      "path": "public-delta/assets/index-DAP7vzC9.js",
-      "url": "/assets/index-DAP7vzC9.js",
-      "bytes": 421636,
-      "sha256": "503d2fa51067106d6fc27534b79a1d47c65a3a3650d891fca56e54f932986600",
-      "delivery": "IDENTICAL_BYTES_EMBEDDED_IN_ADMIN_INLINE_PUBLIC; NO_SEPARATE_ASSETS_UPLOAD"
+      "path": "public-delta/assets/index-DqSQqcsr.js",
+      "url": "/assets/index-DqSQqcsr.js",
+      "bytes": 426432,
+      "sha256": "5de298cdc27d3f7c63af08e2f9fd3712433d98e7a9d22d9b3e210fbdaca9ef87",
+      "delivery": "IDENTICAL_EXISTING_D78_BYTES_EMBEDDED_IN_ADMIN_INLINE_PUBLIC; NO_SEPARATE_ASSETS_UPLOAD"
     },
     {
       "path": "public-delta/index.html",
       "url": "/index.html",
       "bytes": 538,
-      "sha256": "ffde3c3bdd5bd6ac475698609a158dd7ca0d82093ee9fd89c39db008afdfe30d",
-      "delivery": "IDENTICAL_BYTES_EMBEDDED_IN_ADMIN_INLINE_PUBLIC; NO_SEPARATE_ASSETS_UPLOAD"
+      "sha256": "5c36c8d108262553b6fde8bd182983125ac4bc51d225436729332f541c84b329",
+      "delivery": "IDENTICAL_EXISTING_D78_BYTES_EMBEDDED_IN_ADMIN_INLINE_PUBLIC; NO_SEPARATE_ASSETS_UPLOAD"
     }
   ],
-  "publicDelivery": "Map URL synchronization and historical semantics only; exact public bytes embedded in five-module package; original backend response unchanged",
+  "publicDelivery": "Existing approved d78 account Operation and customer Journal-return UI; exact static bytes embedded in five-module package, no backend or permission change",
   "files": [
     {
       "path": "ORIGINAL-FIVE-MODULES.tar.gz",
@@ -46,13 +46,13 @@
     },
     {
       "path": "frontend/admin-inline-public.mjs",
-      "bytes": 589295,
-      "sha256": "ee23fda71c75470c056da38ca12a211bae69efdb54ab06e195c43947ddb67330"
+      "bytes": 595687,
+      "sha256": "b8d2770483a53fa3dcce3b6f276f604717e78b89b35d1e6093fbba239bd6e170"
     },
     {
       "path": "frontend/admin-release-identity.mjs",
-      "bytes": 305,
-      "sha256": "f4ee900ec1f1bf6cfefd8d178a9287df0506bbe726161f4fa7a3a1b578a084c4"
+      "bytes": 325,
+      "sha256": "c81d41046634937d15bf4408ceda465c8f3683a4c2202e22e7a6dfbf4282ae96"
     },
     {
       "path": "frontend/admin-restored-read-routing.mjs",
@@ -75,14 +75,14 @@
       "sha256": "f4fc6f8918f7bcc9beb6716834c0ddff2126f0a16596beb44ebbe51adb7f0cd0"
     },
     {
-      "path": "public-delta/assets/index-DAP7vzC9.js",
-      "bytes": 421636,
-      "sha256": "503d2fa51067106d6fc27534b79a1d47c65a3a3650d891fca56e54f932986600"
+      "path": "public-delta/assets/index-DqSQqcsr.js",
+      "bytes": 426432,
+      "sha256": "5de298cdc27d3f7c63af08e2f9fd3712433d98e7a9d22d9b3e210fbdaca9ef87"
     },
     {
       "path": "public-delta/index.html",
       "bytes": 538,
-      "sha256": "ffde3c3bdd5bd6ac475698609a158dd7ca0d82093ee9fd89c39db008afdfe30d"
+      "sha256": "5c36c8d108262553b6fde8bd182983125ac4bc51d225436729332f541c84b329"
     },
     {
       "path": "wrangler.json",
@@ -90,5 +90,6 @@
       "sha256": "15371596227611240f931b4abe6592051f7e0828c11f85a58a450f7d2be26a58"
     }
   ],
-  "activeBaselineVersion": "18a0a4ae-9145-461b-a403-1f69840487b3"
+  "activeBaselineVersion": "efefd8e6-225d-4be0-94a3-c08199914d51",
+  "publicBuildInputHashMeaning": "SHA256 of sorted-key publicInputs JSON from existing followup-build/BUILD-RESULT.json; UTF-8 without terminal LF"
 }
