@@ -13,14 +13,14 @@
       "sha256": "f4fc6f8918f7bcc9beb6716834c0ddff2126f0a16596beb44ebbe51adb7f0cd0",
       "bytes": 17964
     },
-    "/assets/index-DqSQqcsr.js": {
+    "/assets/index-cJgAHR-u.js": {
       "mime": "application/javascript; charset=utf-8",
-      "sha256": "5de298cdc27d3f7c63af08e2f9fd3712433d98e7a9d22d9b3e210fbdaca9ef87",
-      "bytes": 426432
+      "sha256": "8d1d14c290b17a370750d09d16c7c2029ad8cfd31dd45c2a83fceb2961e5a1bc",
+      "bytes": 431380
     },
     "/index.html": {
       "mime": "text/html; charset=utf-8",
-      "sha256": "5c36c8d108262553b6fde8bd182983125ac4bc51d225436729332f541c84b329",
+      "sha256": "fd37fb24d1ca5c69f07507b5794850907c2545fc6509eee9cf849db110bf2bdb",
       "bytes": 538
     }
   },
@@ -29,11 +29,11 @@
     "negative-probes/missing-environment.mjs": "5e02221cadda149854588488c3068a6bde2e7dae3c1a758e8ce7ad6f1f7b607e",
     "negative-probes/missing-api.mjs": "76425461b5211a80c3faea7ae2720f165873c0235fadbfa1e365dcb8e82845e3"
   },
-  "scope": "Only new item3 publication input startup proof; not old business retesting",
+  "scope": "P1 transport entry binding only; historical configuration probes inherited, not rerun or rebuilt",
   "entryBinding": {
-    "sourceSnapshot": "d78cdcdb7776bd91841d7eb5b981f9f6ca4bb50c2c638e3f2f0f8ca79a041ebc",
-    "candidateId": "FL-LAUNCH-B17-20261031-account-operation-followup",
-    "source": "Existing approved followup-build public assets; copied without rebuilding",
-    "configurationProbeScope": "Inherited historical configuration probes/publicInput kept unchanged; not regenerated or claimed to be d78 probes"
+    "sourceSnapshot": "f15bae5b58ad3ab93a6cdb51473468ff57177b2e24e2657fa1e3dc76f22158e1",
+    "candidateId": "FL-LAUNCH-B17-20261103-access-auth401",
+    "source": "Exact existing P1 build/public; copied without rebuilding",
+    "configurationProbeScope": "Inherited historical configuration probes/publicInput kept unchanged; not regenerated or claimed as P1 probes"
   }
 }

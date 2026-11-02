@@ -9,16 +9,16 @@ export const target = Object.freeze({
   repository:'xw564477242-cmyk/fastlik-Admin',
   ref:'refs/heads/codex/fl-b17-revenue-read-ci-20261029',
   account:'af8ac20dee08abe5ec98a892ae83873e', worker:'fastlink-admin-preview-b13',
-  previousVersionPrefix:'efefd8e6-',
-  manifestSHA256:'7ef1cc7bbf90a4e5cc9620ea13374a6010d4a505336b1c0f0f5ce883337f8466',
-  sourceSnapshot:'d78cdcdb7776bd91841d7eb5b981f9f6ca4bb50c2c638e3f2f0f8ca79a041ebc',
+  previousVersionPrefix:'86f47012-',
+  manifestSHA256:'5db35e009f065cc00dafe58c679cffd4e942db9bbfe2ab75cdd11e40e552f431',
+  sourceSnapshot:'f15bae5b58ad3ab93a6cdb51473468ff57177b2e24e2657fa1e3dc76f22158e1',
   originalArchiveSHA256:'4264d790242cc037642fc5fcdae2b8b25f1a6e3d0454b13c0320e25297848fc5',
 })
 const packageRoot = path.resolve('ci/admin-revenue-read-b17-startup-fix')
 const sha = bytes => createHash('sha256').update(bytes).digest('hex')
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const moduleNames = ['admin-inline-public.mjs','admin-release-identity.mjs','admin-restored-read-routing.mjs','safe-preview-diagnostics.mjs','worker.js']
-const publicNames = ['assets/index-DqSQqcsr.js','assets/index-Cisn8fL9.css','index.html']
+const publicNames = ['assets/index-cJgAHR-u.js','assets/index-Cisn8fL9.css','index.html']
 const retainedTypes = ['plain_text','json','secret_text','secret_key','assets']
 const leaseNames = new Set(['FASTLINK_PREVIEW_DEPLOYMENT_PROFILE','B17_WINDOW_PHASE',
   'B17_RETENTION_UNTIL_UTC','B17_WINDOW_OPEN_UTC','B17_WINDOW_CLOSE_UTC',
